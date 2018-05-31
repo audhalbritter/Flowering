@@ -23,10 +23,39 @@ fertile <- fertile %>%
 
 
 
-### Maps
+### Making a map for each turf for the proportion of flowering per species (occurence 4 years)
+
+# Function to plot points and curves for predicted values and data
+plotMaps <- function(dat){
+  dat %>% 
+    ggplot(aes(x = Year, y = PropFertile, colour = species, linetype = functionalGroup, shape = factor(n))) +
+    scale_linetype_manual(values = c("dashed", "solid")) +
+    scale_shape_manual(values = c(16, 1)) +
+    geom_point() +
+    geom_line()
+}
+
+# Make plots and print PDF
+FloweringMaps <- fertile %>% 
+  group_by(turfID, species) %>% 
+  mutate(n = n()) %>% # count in how many year the species occurs
+  filter(n > 2) %>%
+  ungroup() %>% 
+  group_by(turfID) %>% 
+  do(fl.maps = plotMaps(.))
+
+pdf(file = "Output/FloweringMaps.pdf")
+FloweringMaps$fl.maps
+dev.off()  
 
 
-  
+
+### What to test
+# Does proportion flowering differ across years?
+# Does proportion flowering differ between PFG, early vs late flowering species and alpine/generalists?
+# Does proportion of flowering differ across treatments (warm, wet, ww)?
+
+
 ggplot(plotdata, aes(x = Year, y = PropFertile, color = newTT)) +
   geom_smooth(method = 'loess', se = FALSE, formula = y ~ x) +
   scale_color_manual(name = "Treatment", values = c("#999999", "#E69F00", "#56B4E9", "#CC79A7")) +
