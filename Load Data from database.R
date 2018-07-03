@@ -52,12 +52,19 @@ traits <- tbl(con, "character_traits") %>%
   # Lower: LAlp but not Nem, BNem, SBor => alpine
 
 
+# Join fertility and trait data
+fertile <- fertile %>% 
+  left_join(traits, by = "species")
+  
+
 ### Data curation  
-# remove first year?
-# QUESTIONS
-# should I only use species with a certain abundance? should be present in at least 2 subplots? Otherwise 0 or 100% flowering
-# remove species that only occur (cover) in less than 3 or 4 years
-# Do I only want "original" plant or also invaders
-# remove first year data
-
-
+fertile <- fertile %>% 
+  filter(year > 2009) %>% # remove first year, because of fence effect
+  # remove species that occur in less than 3 years
+  group_by(turfID, species) %>% 
+  mutate(nYears = n()) %>%
+  filter(nYears > 3) 
+  # Leave for now, but maybe also filter species (at site level) that never flower
+  #group_by(siteID, species) %>% 
+  #mutate(sum(SumOffertile)) %>% 
+  #filter(`sum(SumOffertile)` == 0)
