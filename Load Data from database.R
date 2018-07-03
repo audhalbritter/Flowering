@@ -2,8 +2,6 @@
 library("RSQLite")
 #library("DBI")
 library("tidyverse")
-library("lubridate")
-library("cowplot")
 
 con <- dbConnect(SQLite(), dbname = "~/Dropbox/Bergen/seedclimComm/database/seedclim.sqlite")
 
