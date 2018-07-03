@@ -1,37 +1,63 @@
 ### LOAD FERTILITY DATA FROM DATABASE ####
 library("RSQLite")
-library("tidyverse")
 #library("DBI")
-library("RODBC")
+library("tidyverse")
+library("lubridate")
+library("cowplot")
 
-con <- dbConnect(SQLite(), dbname = "Database/seedclim.sqlite")
+con <- dbConnect(SQLite(), dbname = "~/Dropbox/Bergen/seedclimComm/database/seedclim.sqlite")
 
 # vies all subtables
 DBI::dbListTables(conn = con)
 # view column names of a table
-dbListFields(con, "taxon")
-
-#more traits = character_traits
-#numeric_traits???
-### FINAL QUIERY
-# including vegetation height
-fertilityQ <-"SELECT blocks.siteID, blocks.blockID, turfs.turfID, turfs.TTtreat, subTurfCommunity.year, subTurfCommunity.species, Count(subTurfCommunity.species) AS CountOfspecies, Sum(subTurfCommunity.fertile) AS SumOffertile, taxon.lifeSpan, sites.Temperature_level, sites.Precipitation_level, taxon.family, taxon.functionalGroup, [character_traits].[F-Vår], [character_traits].[F-Fso], [character_traits].[F-Mso], [character_traits].[F-Sso], [character_traits].[F-Hø], [character_traits].Nem, [character_traits].BNem, [character_traits].SBor, [character_traits].MBor, [character_traits].Nbor, [character_traits].LAlp, [character_traits].MAlp, [character_traits].HAlp, turfCommunity.cover, turfEnvironment.vegetationHeight
-FROM ((sites INNER JOIN ((blocks INNER JOIN plots ON blocks.blockID = plots.blockID) INNER JOIN turfs ON plots.plotID = turfs.originPlotID) ON sites.siteID = blocks.siteID) INNER JOIN ((([character_traits] INNER JOIN (taxon INNER JOIN (subTurfCommunity INNER JOIN subTurfEnvironment ON (subTurfCommunity.subTurf = subTurfEnvironment.subTurf) AND (subTurfCommunity.year = subTurfEnvironment.year)) ON taxon.species = subTurfCommunity.species) ON [character_traits].species = subTurfCommunity.species) INNER JOIN turfCommunity ON (taxon.species = turfCommunity.species) AND (subTurfEnvironment.year = turfCommunity.year)) INNER JOIN turfEnvironment ON subTurfEnvironment.year = turfEnvironment.year) ON (turfs.turfID = turfEnvironment.turfID) AND (turfs.turfID = turfCommunity.turfID) AND (turfs.turfID = subTurfEnvironment.turfID) AND (turfs.turfID = subTurfCommunity.turfID)) INNER JOIN subTurfCommunity ON (subTurfCommunity.species = [character_traits].species) AND (subTurfCommunity.year = subTurfEnvironment.year) AND (subTurfCommunity.subTurf = subTurfEnvironment.subTurf) AND (turfs.turfID = subTurfCommunity.turfID) AND (taxon.species = subTurfCommunity.species)
-GROUP BY blocks.siteID, blocks.blockID, turfs.turfID, turfs.TTtreat, subTurfCommunity.year, subTurfCommunity.species, taxon.lifeSpan, sites.Temperature_level, sites.Precipitation_level, taxon.family, taxon.functionalGroup, [character_traits].[F-Vår], [character_traits].[F-Fso], [character_traits].[F-Mso], [character_traits].[F-Sso], [character_traits].[F-Hø], [character_traits].Nem, [character_traits].BNem, [character_traits].SBor, [character_traits].MBor, [character_traits].Nbor, [character_traits].LAlp, [character_traits].MAlp, [character_traits].HAlp, turfCommunity.cover, turfEnvironment.vegetationHeight
-HAVING (((turfs.TTtreat)<>' ') AND ((subTurfCommunity.year)<>2010) AND ((taxon.lifeSpan)<>'annual') AND ((taxon.functionalGroup)<>'woody' And (taxon.functionalGroup)<>'pteridophyte'));"
-
-fertility <- tbl(con, sql(fertilityQ)) %>% 
-  collect()
+dbListFields(con, "sites")
 
 
+### Load fertility subTurf data from database
+fertile <- tbl(con, "subTurfCommunity") %>% 
+  select(turfID, subTurf, year, species, fertile, dominant) %>% # could also be interesting to import: seedlings, juvenile, adult, vegetative
+  left_join(tbl(con, "turfs"), by = "turfID") %>% 
+  
+  # only control plots
+  filter(TTtreat %in% c("TTC", "TT1")) %>%
+  select(-RTtreat, -GRtreat, -destinationPlotID) %>% 
+  
+  left_join(tbl(con, "plots"), by = c("originPlotID" = "plotID")) %>% 
+  left_join(tbl(con, "blocks"), by = c("blockID")) %>% 
+  left_join(tbl(con, "sites"), by = c("siteID")) %>% 
+  
+  collect() %>% 
+  
+  # Calculate stuff
+  group_by(turfID, year, species, siteID, blockID, originPlotID, TTtreat, temperature_level, precipitation_level) %>% 
+  summarize(SumOffertile = sum(fertile), NumberOfOccurrence = n()) %>% # loos colums here, need to add in group_by above if I need to keep more columns
+  mutate(PropFertile = SumOffertile / NumberOfOccurrence)
 
-### This one copied from China data works
-coverQ <-
-  "SELECT sites.siteID AS originSiteID, blocks.blockID AS originBlockID, plots.plotID AS originPlotID, turfs.turfID, plots_1.plotID AS destPlotID, blocks_1.blockID AS destBlockID, sites_1.siteID AS destSiteID, turfs.TTtreat, turfCommunity.year, turfCommunity.species, turfCommunity.cover, turfCommunity.flag, taxon.speciesName
-FROM blocks, sites, plots, turfs, turfCommunity, plots AS plots_1, blocks AS blocks_1, sites AS sites_1, taxon
-WHERE blocks.siteID = sites.siteID AND plots.blockID = blocks.blockID AND turfs.originPlotID = plots.plotID AND turfCommunity.turfID = turfs.turfID AND turfs.destinationPlotID = plots_1.plotID AND blocks_1.siteID = sites_1.siteID AND plots_1.blockID = blocks_1.blockID AND turfCommunity.species = taxon.species"
 
-cover.thin <- tbl(con, sql(coverQ)) %>% 
-  collect()
+# Load taxon and trait data
+traits <- tbl(con, "character_traits") %>% 
+  left_join(tbl(con, "taxon", by = "species")) %>% 
+  collect() %>% 
+  spread(key = trait, value = value) %>% 
+  select(-`Common-rear`, -Habitat, -`Soil type`) %>% 
+  
+  # Flowering time
+  # FloweringStart: Var or FSo => early; otherwise late
+  rename(FloweringFinish = `Flowering finish`, FloweringStart = `Flowering start`) %>% 
+  mutate(FloweringFinish = plyr::mapvalues(FloweringFinish, c("H<f8>st", "MSo", "SSo", "FSo", "V<e5>r"), c("Host", "MSo", "SSo", "FSo", "Var"))) %>% 
+  mutate(FloweringStart = plyr::mapvalues(FloweringStart, c("MSo", "SSo", "FSo", "V<e5>r"), c("MSo", "SSo", "FSo", "Var")))
+
+  # Occurrence
+  # Upper: everything but not HAlp, MAlp or Lalp => lowland
+  # Lower: LAlp but not Nem, BNem, SBor => alpine
+
+
+### Data curation  
+# remove first year?
+# QUESTIONS
+# should I only use species with a certain abundance? should be present in at least 2 subplots? Otherwise 0 or 100% flowering
+# remove species that only occur (cover) in less than 3 or 4 years
+# Do I only want "original" plant or also invaders
+# remove first year data
 
 
