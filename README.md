@@ -2,7 +2,7 @@ Fertility data from SeedClim project
 
 Data:
 Proportion of fertile plant species per turf (PropFertile = SumOffertile / NumberOfOccurrence in subplot)
-Years: 2009 2010 2011 2012 2013 2015 2016 2017
+Years: 2009 2011 2012 2013 2015 2016 2017
 Species: 200 graminoids and forbs
 
 
