@@ -3,6 +3,7 @@ source("Load Data from database.R")
 
 library("lme4")
 library("broom")
+library("emmeans")
 
 
 # 1) Does proportion of fertility differ across years?
@@ -13,7 +14,9 @@ fit <- fertile %>% ungroup() %>% mutate(year = factor(year)) %>%
 summary(fit)
 anova(fit, test = "F")
 
-summary(multcomp::glht(fit, multcomp::mcp(year = "Tukey")))
+# Multiple comparisions
+comparisons <- summary(multcomp::glht(fit, multcomp::mcp(year = "Tukey")))
+comps <- tidy(cld(comparisons))
 
 
 output <- augment(fit) %>% 
@@ -21,7 +24,8 @@ output <- augment(fit) %>%
   as.tibble() %>% 
   mutate(response = plogis(.fitted)) %>% 
   mutate(se2 = logit2prob(output$.se.fit)) %>% 
-  mutate(se = plogis(.se.fit))
+  mutate(se = plogis(.se.fit)) %>% 
+  left_join(comps, by = c("year" = "lhs"))
   
 
 # Backtransform logit
@@ -31,13 +35,15 @@ logit2prob <- function(logit){
   return(prob)
 }
 
-
+# make plot for average fitted values plus se/CI for each year
 output %>% 
-  group_by(year) %>% 
+  group_by(year, letters) %>% 
   summarise(response = mean(response), se = mean(se)) %>% 
-  ggplot(aes(y = response, x = year, ymin = response -se, ymax = response + se)) +
+  ggplot(aes(y = response, x = year, ymin = response -se, ymax = response + se, label = letters)) +
   geom_point() +
   geom_errorbar(width = 0) +
+  geom_text(aes(y = 0.16)) +
+  labs(y = "")
   ylim(0.08, 0.17)
   
 
