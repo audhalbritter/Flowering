@@ -78,3 +78,32 @@ fertile <- fertile %>%
   #group_by(siteID, species) %>% 
   #mutate(sum(SumOffertile)) %>% 
   #filter(`sum(SumOffertile)` == 0)
+
+
+
+#### Load Climate data ####
+
+### GRIDDED DATA
+load("~/Dropbox/Bergen/SeedClim Climate/SeedClim-Climate-Data/GriddedMonth_AnnualClimate2009-2017.Rdata", verbose=TRUE)
+annual <- monthlyClimate %>% 
+  filter(Logger %in% c("Precipitation", "Temperature")) %>% 
+  mutate(year = year(dateMonth)) %>% 
+  group_by(Site, Logger, year) %>% 
+  spread(key = Logger, value = value) %>% 
+  summarise(AnnPrec = sum(Precipitation, na.rm = TRUE), MeanTemp = mean(Temperature, na.rm = TRUE)) %>% 
+  rename(site = Site) %>% 
+  gather(key = variable, value = value, MeanTemp, AnnPrec)
+
+summer <- monthlyClimate %>% 
+  filter(Logger %in% c("Temperature")) %>% 
+  mutate(year = year(dateMonth), month = month(dateMonth)) %>%
+  filter(month %in% c(6, 7, 8, 9)) %>% 
+  group_by(Site, year) %>% 
+  summarise(value = mean(value, na.rm = TRUE)) %>% 
+  rename(site = Site) %>% 
+  mutate(variable = "MeanSummerTemp")
+
+
+Climate <- annual %>% 
+  rbind(summer) %>% 
+  spread(key = variable, value = value) 
