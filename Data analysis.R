@@ -14,7 +14,7 @@ summary(fit.glm)
 
 
 # Multiple comparisions
-comparisons <- summary(multcomp::glht(fit, multcomp::mcp(year = "Tukey")))
+comparisons <- summary(multcomp::glht(fit.glm, multcomp::mcp(year = "Tukey")))
 comps <- tidy(cld(comparisons))
 
 
@@ -25,7 +25,7 @@ logit2prob <- function(logit){
   return(prob)
 }
 
-output <- augment(fit.glm) %>% 
+output.glm <- augment(fit.glm) %>% 
   select(year, .fitted, .se.fit) %>% 
   as.tibble() %>% 
   mutate(response = plogis(.fitted)) %>% 
@@ -34,7 +34,7 @@ output <- augment(fit.glm) %>%
 
 
 # make plot for average fitted values plus se/CI for each year
-FertilAcrossYears <- output %>% 
+FertilAcrossYears <- output.glm %>% 
   distinct() %>%  
   ggplot(aes(y = response, x = year, ymin = ci.low, ymax = ci.high, label = letters)) +
   geom_point(size = 4) +
@@ -91,29 +91,59 @@ g0 + geom_pointrange(aes(ymin = plo, ymax = phi))
 #***********************************************************************************************************
 # 2) Does variation in the proportion of fertility differ across the climate grid?
   
-# fit model
-fit <- fertile %>% ungroup() %>% mutate(year = factor(year), temperature_level = factor(temperature_level), precipitation_level = factor(precipitation_level)) %>% rowid_to_column(., "ID") %>% 
-  glmer(cbind(SumOffertile, NumberOfOccurrence - SumOffertile) ~ year + temperature_level * precipitation_level + (1|species) + (1|blockID) + (1|ID), data = ., family = "binomial")
-summary(fit)
-anova(fit, test = "F")
-# add ID from 1-5... as random effect
+# fit GLM model
+fit.glm2 <- fertile %>% ungroup() %>% mutate(year = factor(year), temperature_level = factor(temperature_level), precipitation_level = factor(precipitation_level)) %>% 
+  glm(PropFertile ~ year + temperature_level * precipitation_level, data = ., family = "quasibinomial")
+summary(fit.glm2)
+anova(fit.glm2, test = "F")
 
-augment(fit) %>% 
+output.glm2 <- augment(fit.glm2) %>% 
   select(year, temperature_level, precipitation_level, .fitted, .se.fit) %>% 
   mutate(response = plogis(.fitted)) %>% 
-  mutate(ci.low = plogis(.fitted - 1.96 * .se.fit), ci.high = plogis(.fitted + 1.96 * .se.fit)) %>% 
+  mutate(ci.low = plogis(.fitted - 1.96 * .se.fit), ci.high = plogis(.fitted + 1.96 * .se.fit)) %>% distinct
+
+
+# make plot for average fitted values plus se/CI for each year
+FertilAcrossGrid <- output.glm2 %>% 
+  mutate(year2 = year(as.Date(year, format = "%Y"))) %>% 
+  mutate(Pmm = plyr::mapvalues(precipitation_level, c(1, 2, 3, 4), c("500mm", "1200mm", "2000mm", "2700mm"))) %>% 
+  mutate(Pmm = factor(Pmm, levels =  c("500mm", "1200mm", "2000mm", "2700mm"))) %>% 
+  ungroup() %>% 
+  mutate(temperature_level = plyr::mapvalues(temperature_level, c(1,2,3), c("alpine", "subalpine", "boreal"))) %>% 
+  mutate(temperature_level = factor(temperature_level, levels = c("alpine", "subalpine", "boreal"))) %>% 
+  ggplot(aes(y = response, x = year2, ymin = ci.low, ymax = ci.high, colour = temperature_level)) +
+  geom_point(size = 2, position = position_dodge(width = 0.4)) +
+  geom_errorbar(width = 0, position = position_dodge(width = 0.4)) +
+  scale_color_manual(name = "Temperature level", values = c("#56B4E9", "#E69F00", "#D55E00")) +
+  labs(y = "Proportion of fertile", x = "") +
+  facet_grid(~ Pmm)
+ggsave(FertilAcrossGrid, filename = "Output/FertilAcrossGrid.jpeg", dpi = 300, width = 8, height = 5)
+
+
+
+
+# fit GLMER model
+fit <- fertile %>% ungroup() %>% mutate(year = factor(year), temperature_level = factor(temperature_level), precipitation_level = factor(precipitation_level)) %>% rowid_to_column(., "ID") %>% 
+  glmer(cbind(SumOffertile, NumberOfOccurrence - SumOffertile) ~ year + temperature_level * precipitation_level + (1|blockID), data = ., family = "binomial")
+# model does not work with ID as random effect, does not converge
+summary(fit)
+anova(fit, test = "F")
+
+augment(fit) %>% 
+  select(year, temperature_level, precipitation_level, .fixed) %>% 
+  mutate(response = plogis(.fixed)) %>% 
   distinct() %>% 
-  ggplot(aes(y = response, x = year, ymin = ci.low, ymax = ci.high, group = temperature_level, color = temperature_level)) +
+  ggplot(aes(y = response, x = year, group = temperature_level, color = temperature_level)) +
   geom_point(position = position_dodge(width = 0.4)) +
   scale_color_manual(name = "Temperature level", values = c("#56B4E9", "#E69F00", "#D55E00")) +
-  geom_errorbar(width = 0, position = position_dodge(width = 0.4)) +
+  #geom_errorbar(width = 0, position = position_dodge(width = 0.4)) +
   labs(x = "", y = "Proportion fertile") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
   facet_grid( ~ precipitation_level)
 
 
 
-# Proportion flowering over time
+# Raw data proportion flowering across grid and time
 fertile %>% 
   group_by(year, temperature_level, precipitation_level) %>% 
   summarise(mean = mean(PropFertile), n = n(), se = sd(PropFertile)/sqrt(n)) %>% 
@@ -126,10 +156,7 @@ fertile %>%
   geom_hline(yintercept = 0, colour = "grey", linetype = "dashed") +
   labs(x = "", y = "Proportion fertile") +
   #scale_x_date(date_labels =  "%Y") +
-  facet_grid(temperature_level ~ precipitation_level)
-
-
-
+  facet_grid( ~ precipitation_level)
 
 
 
