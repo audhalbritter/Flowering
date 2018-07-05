@@ -1,7 +1,18 @@
 ### LOAD FERTILITY DATA FROM DATABASE ####
+
+# load libraries
 library("RSQLite")
 #library("DBI")
 library("tidyverse")
+
+
+# Stuff
+pn <- . %>% print(n = Inf)
+
+# Colours
+# The palette with grey:
+cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
 
 con <- dbConnect(SQLite(), dbname = "~/Dropbox/Bergen/seedclimComm/database/seedclim.sqlite")
 
@@ -27,7 +38,7 @@ fertile <- tbl(con, "subTurfCommunity") %>%
   collect() %>% 
   
   # Calculate stuff
-  group_by(turfID, year, species, siteID, blockID, originPlotID, TTtreat, temperature_level, precipitation_level) %>% 
+  group_by(turfID, year, species, siteID, blockID, originPlotID, TTtreat, temperature_level, precipitation_level, annualPrecipitation_gridded, summerTemperature_gridded) %>% 
   summarize(SumOffertile = sum(fertile), NumberOfOccurrence = n()) %>% # loos colums here, need to add in group_by above if I need to keep more columns
   mutate(PropFertile = SumOffertile / NumberOfOccurrence)
 
@@ -57,11 +68,12 @@ fertile <- fertile %>%
 
 ### Data curation  
 fertile <- fertile %>% 
-  filter(year > 2009) %>% # remove first year, because of fence effect
+  filter(year > 2010) %>% # remove first year, because of fence effect
   # remove species that occur in less than 3 years
   group_by(turfID, species) %>% 
   mutate(nYears = n()) %>%
-  filter(nYears > 3) 
+  filter(nYears > 3) %>% 
+  filter(functionalGroup %in% c("graminoid", "forb"))
   # Leave for now, but maybe also filter species (at site level) that never flower
   #group_by(siteID, species) %>% 
   #mutate(sum(SumOffertile)) %>% 
