@@ -68,13 +68,27 @@ fertile <- fertile %>%
 
 ### Data curation  
 fertile <- fertile %>% 
-  filter(year > 2010) %>% # remove first year, because of fence effect
+  filter(year != 2010) %>% # remove first year, because of fence effect
   # remove species that occur in less than 3 years
   group_by(turfID, species) %>% 
   mutate(nYears = n()) %>%
   filter(nYears > 3) %>% 
-  filter(functionalGroup %in% c("graminoid", "forb"))
-  # Leave for now, but maybe also filter species (at site level) that never flower
+  filter(functionalGroup %in% c("graminoid", "forb")) %>% 
+  # relative fertility (correct for species having different proportion of fertility)
+  group_by(species) %>% 
+  mutate(mean.fertile = mean(PropFertile)) %>% 
+  mutate(rel.fertile = PropFertile / mean.fertile) %>% 
+  mutate(rel.fertile = ifelse(rel.fertile == "NaN", 0 , rel.fertile))
+
+# Get common species
+commonSP <- fertile %>% 
+  filter(NumberOfOccurrence > 15) %>% distinct(species)
+
+fertile <- fertile %>%
+  mutate(commonSP = ifelse(species %in% commonSP), 1, 0)
+
+
+# Leave for now, but maybe also filter species (at site level) that never flower
   #group_by(siteID, species) %>% 
   #mutate(sum(SumOffertile)) %>% 
   #filter(`sum(SumOffertile)` == 0)
@@ -84,26 +98,38 @@ fertile <- fertile %>%
 #### Load Climate data ####
 
 ### GRIDDED DATA
-load("~/Dropbox/Bergen/SeedClim Climate/SeedClim-Climate-Data/GriddedMonth_AnnualClimate2009-2017.Rdata", verbose=TRUE)
-annual <- monthlyClimate %>% 
-  filter(Logger %in% c("Precipitation", "Temperature")) %>% 
-  mutate(year = year(dateMonth)) %>% 
-  group_by(Site, Logger, year) %>% 
-  spread(key = Logger, value = value) %>% 
-  summarise(AnnPrec = sum(Precipitation, na.rm = TRUE), MeanTemp = mean(Temperature, na.rm = TRUE)) %>% 
-  rename(site = Site) %>% 
-  gather(key = variable, value = value, MeanTemp, AnnPrec)
+load("~/Dropbox/Bergen/SeedClim Climate/SeedClim-Climate-Data/GriddedDailyClimateData2009-2017.RData", verbose=TRUE)
 
+# Calculate monthly values (sum for prec, mean for temp)
+monthlyClimate <- climate %>%
+  select(Site, Date, Precipitation, Temperature) %>% 
+  mutate(Date = dmy(paste0("15-",format(Date, "%b.%Y")))) %>%
+  gather(key = Logger, value = value, -Site, -Date) %>% 
+  group_by(Date, Site, Logger) %>%
+  summarise(n = n(), mean = mean(value), sum = sum(value)) %>% 
+  mutate(Value = ifelse(Logger == "Precipitation", sum, mean)) %>% 
+  select(-n, -sum, -mean)
+
+
+
+# get annual values
 summer <- monthlyClimate %>% 
-  filter(Logger %in% c("Temperature")) %>% 
-  mutate(year = year(dateMonth), month = month(dateMonth)) %>%
-  filter(month %in% c(6, 7, 8, 9)) %>% 
-  group_by(Site, year) %>% 
-  summarise(value = mean(value, na.rm = TRUE)) %>% 
-  rename(site = Site) %>% 
-  mutate(variable = "MeanSummerTemp")
+  filter(Logger == "Temperature" & month(Date) %in% 6:9) %>%
+  mutate(Year = year(Date)) %>% 
+  group_by(Year, Site, Logger) %>%
+  summarise(n = n(), Value = mean(Value)) %>% 
+  mutate(Logger = "MeanSummerTemp") %>% 
+  select(-n)
 
 
-Climate <- annual %>% 
-  rbind(summer) %>% 
-  spread(key = variable, value = value) 
+Climate <- monthlyClimate %>%
+  mutate(Year = year(Date)) %>% 
+  group_by(Year, Site, Logger) %>%
+  summarise(n = n(), mean = mean(Value), sum = sum(Value)) %>% 
+  mutate(Value = ifelse(Logger == "Precipitation", sum, mean)) %>% 
+  select(-n, -sum, -mean) %>% 
+  bind_rows(summer) %>% 
+  spread(key = Logger, value = Value) %>% 
+  rename(AnnPrec = Precipitation, MeanTemp = Temperature)
+
+
