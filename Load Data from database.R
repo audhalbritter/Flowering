@@ -80,13 +80,6 @@ fertile <- fertile %>%
   mutate(rel.fertile = PropFertile / mean.fertile) %>% 
   mutate(rel.fertile = ifelse(rel.fertile == "NaN", 0 , rel.fertile))
 
-# Get common species
-commonSP <- fertile %>% 
-  filter(NumberOfOccurrence > 15) %>% distinct(species)
-
-fertile <- fertile %>%
-  mutate(commonSP = ifelse(species %in% commonSP), 1, 0)
-
 
 # Leave for now, but maybe also filter species (at site level) that never flower
   #group_by(siteID, species) %>% 
