@@ -16,10 +16,10 @@ SingleSP <- single %>%
   ungroup() %>% 
   mutate(temperature_level = plyr::mapvalues(temperature_level, c(1,2,3), c("alpine", "subalpine", "boreal"))) %>% 
   mutate(temperature_level = factor(temperature_level, levels = c("alpine", "subalpine", "boreal"))) %>% 
-  ggplot(aes(x = year, y = mean, ymin = mean -se, ymax = mean + se, color = factor(temperature_level))) +
+  ggplot(aes(x = year, y = mean, ymin = mean -se, ymax = mean + se, color = factor(temperature_level), group = factor(temperature_level))) +
   geom_point() +
   geom_errorbar(width = 0) +
-  geom_line() +
+  geom_path() +
   labs(x = "", y = "Proportion of fertile") +
   scale_color_manual(name = "Temperature level", values = c("#56B4E9", "#E69F00", "#D55E00")) +
   theme(legend.position="top",
