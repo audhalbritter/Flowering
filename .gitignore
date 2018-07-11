@@ -48,3 +48,7 @@ vignettes/*.pdf
 *.pdf
 *.jpeg
 *.md
+
+
+# mac stuff
+*.DS_Store
