@@ -19,6 +19,7 @@ fertile <- fertile %>%
   mutate(n = n()) %>% 
   filter(n > 7) %>% 
   ungroup() %>% 
+  mutate(year2 = year) %>% 
   mutate(year = factor(year), 
          temperature_level = factor(temperature_level), 
          precipitation_level = factor(precipitation_level)) %>% 
@@ -195,8 +196,7 @@ fertile %>%
 #***********************************************************************************************************
 # Does proportion flowering differ between graminoids and forbs
 
-fit.glm.fG <- fertile %>% ungroup() %>% mutate(year = factor(year), temperature_level = factor(temperature_level), precipitation_level = factor(precipitation_level)) %>% 
-  glm(cbind(SumOffertile, NumberOfOccurrence - SumOffertile) ~ year * functionalGroup * temperature_level, data = ., family = "quasibinomial")
+fit.glm.fG <- glm(PropFertile ~ year * functionalGroup * temperature_level, data = fertile, family = "binomial", weights = NumberOfOccurrence)
 summary(fit.glm.fG)
 anova(fit.glm.fG, test = "F")
 
@@ -216,6 +216,8 @@ ForbsVsGrass <- augment(fit.glm.fG) %>%
 ggsave(ForbsVsGrass, filename = "Output/ForbsVsGrass.jpeg", dpi = 300, width = 8, height = 5)
 
 
+### GLMER
+# Cannot fit glmer model
 
 
 
@@ -223,7 +225,7 @@ ggsave(ForbsVsGrass, filename = "Output/ForbsVsGrass.jpeg", dpi = 300, width = 8
 #***********************************************************************************************************
 # 3) Is the temporal variation in proportion of flowering related to Mean summer Temp, mean temp or ann. prec or previous year climate?
 
-
+# Draw climate plot
 ClimatePlot <- monthlyClimate %>% 
   filter(Logger == "Temperature" & month(Date) %in% 6:9 | Logger == "Precipitation") %>%
   mutate(Year = year(Date)) %>% 
@@ -243,54 +245,53 @@ ClimatePlot <- monthlyClimate %>%
   mutate(Precipitation_level = factor(Precipitation_level, levels =  c("500mm", "1200mm", "2000mm", "2700mm"))) %>% 
   ggplot(aes(x = Temperature, y = Precipitation, colour = factor(Year))) +
   geom_point() +
+  labs(x = "Mean summer temperature in °C", y = "Annual precipitation in mm") +
   facet_grid(Temperature_level ~ Precipitation_level) +
   guides(color = guide_legend(title = "Year")) +
   theme_bw()
 ggsave(ClimatePlot, filename = "Output/ClimatePlot.jpeg", dpi = 300, width = 8, height = 5)
 
 
-
+# Model selection and averaging
 library("MuMIn")
 options(na.action = "na.fail") # can also be put in the model
 options(na.action = "na.omit")
 
 # Join climate data with fertil and also join previous year climate data
 fertileClimate <- fertile %>% 
+  filter(year != "2009") %>% # remove 2009, because no climate data
+  filter(lifeSpan != "annual") %>% # remove annuals, because previous year climate does not affect them, they have to flower
   mutate(site = substr(siteID, 1, 3)) %>% 
   # Join Climate data
-  left_join(Climate, by =c("site" = "Site", "year" = "Year")) %>%
+  left_join(Climate, by =c("site" = "Site", "year2" = "Year")) %>%
   # Join Climate data from previous year
-  mutate(PreviousYear = year - 1) %>% 
+  mutate(PreviousYear = year2 - 1) %>% 
   left_join(Climate, by =c("site" = "Site", "PreviousYear" = "Year")) %>%
   rename(AnnPrec = AnnPrec.x, MeanSummerTemp = MeanSummerTemp.x, MeanTemp = MeanTemp.x, PrevAnnPrec = AnnPrec.y, PrevMeanSummerTemp = MeanSummerTemp.y, PrevMeanTemp = MeanTemp.y)
 
 
+### GRAMINOIDS
 # fit GLM model with all climate variables (need to be this version of the model)
-modClimate <- glm(cbind(SumOffertile, NumberOfOccurrence - SumOffertile) ~ AnnPrec + MeanSummerTemp + MeanTemp + PrevAnnPrec + PrevMeanSummerTemp + PrevMeanTemp, data = fertileClimate, family = "binomial")
-summary(modClimate)
+gram <- fertileClimate %>% filter(functionalGroup == "graminoid") 
+
+modClimateGR <- glm(PropFertile ~ AnnPrec + MeanSummerTemp + MeanTemp + PrevAnnPrec + PrevMeanSummerTemp + PrevMeanTemp, data = gram, family = "binomial", weights = NumberOfOccurrence)
+summary(modClimateGR)
 
 percent.thresh <- 0.95
-model.set <- dredge(modClimate, rank = "AICc", extra = "R^2")
-mm <- data.frame(model.set)
-mm$cumsum <- cumsum(mm$weight)
-mm95 <- mm %>% filter(cumsum < percent.thresh)
-
-model.avg(model.set, subset = cumsum(weight) <= percent.thresh)
-
+model.set <- dredge(modClimateGR, rank = "AICc", extra = "R^2")
+#mm <- data.frame(model.set)
+#mm$cumsum <- cumsum(mm$weight)
+#mm95 <- mm %>% filter(cumsum < percent.thresh)
 averaged.model <- model.avg(model.set, subset = cumsum(weight) <= percent.thresh)
 res <- data.frame(summary(averaged.model)$coefmat.full)
 res
 
-imp <- data.frame(importance(averaged.model))
-imp
-
-
 res %>% 
   rownames_to_column(var = "Variable") %>% 
   setNames(., c("Variable", "Estimate", "StError", "AdjSE", "Zvalue", "Pvalue")) %>% 
-  #mutate(Intercept = first(Estimate), StErrorInercept = first(StError)) %>% 
-  #filter(!Variable == "(Intercept)") %>% 
-  #mutate(Estimate = Estimate + Intercept, StError = StError + StErrorInercept) %>% 
+  mutate(Intercept = first(Estimate), StErrorIntercept = first(StError)) %>% 
+  filter(!Variable == "(Intercept)") %>% 
+  mutate(Estimate = Estimate + Intercept, StError = StError + StErrorIntercept) %>% 
   # Backtransform to response scale
   mutate(CI.low = plogis(Estimate - 1.96 * StError), CI.high = plogis(Estimate + 1.96 * StError)) %>% 
   mutate(Estimate = plogis(Estimate)) %>% 
@@ -303,9 +304,16 @@ res %>%
 
 
 fertileClimate %>% 
-  gather(key = Climate, value = value, AnnPrec, MeanSummerTemp, MeanTemp, PrevAnnPrec, PrevMeanSummerTemp, PrevMeanTemp) %>% 
-  ggplot(aes(x = value, y = PropFertile, color = factor(year))) +
+  gather(key = Climate, value = value, AnnPrec, MeanSummerTemp, MeanTemp, PrevAnnPrec, PrevMeanSummerTemp, PrevMeanTemp) %>%
+  group_by(year, functionalGroup, Climate) %>% 
+  mutate(mean = mean(PropFertile)) %>% 
+  ggplot(aes(x = value, y = mean, color = factor(year))) +
   geom_point() +
-  facet_wrap(~ Climate, scales = "free_x")
+  facet_grid(functionalGroup ~ Climate, scales = "free_x")
 
 
+
+augment(modClimateGR) %>% 
+  ggplot(aes(x = MeanTemp, y = PropFertile)) +
+  geom_point() + 
+  geom_smooth(method = "lm")
