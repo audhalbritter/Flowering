@@ -98,13 +98,17 @@ newdat <- newdat %>%
          tlo = plogis(PropFertile - cmult*sqrt(tvar1)),
          thi = plogis(PropFertile + cmult*sqrt(tvar1)),
          PropFertile = plogis(PropFertile)) %>% 
-  left_join(glmer.comp2, by = c("year" = "lhs"))
+  left_join(glmer.comp2, by = c("year" = "lhs")) %>% 
+  ungroup() %>%
+  mutate(year = as.Date(as.character(year), format = "%Y")) %>% 
+  mutate(year = year(year))
 
 #plot confidence
 FertilAcrossYearsGLMER <- ggplot(newdat, aes(x = year, y = PropFertile, label = letters)) + 
   geom_point(size = 4) +
   geom_pointrange(aes(ymin = plo, ymax = phi)) +
   geom_text(aes(y = 0.17), size = 6) +
+  scale_x_continuous(breaks = c(2010, 2012, 2014, 2016)) +
   labs(y = "Proportion of fertile", x = "")
 ggsave(FertilAcrossYearsGLMER, filename = "Output/FertilAcrossYearsGLMER.jpeg", dpi = 300, width = 8, height = 5)
 
@@ -143,7 +147,7 @@ ggsave(FertilAcrossGrid, filename = "Output/FertilAcrossGrid.jpeg", dpi = 300, w
 
 
 # fit GLMER model
-fit.glmer2 <- glmer(PropFertile ~ year + temperature_level * precipitation_level + (1|species), data = fertile, family = "binomial", weights = NumberOfOccurrence)
+fit.glmer2 <- glmer(PropFertile ~ year + temperature_level * precipitation_level + (1|species) + (1|siteID), data = fertile, family = "binomial", weights = NumberOfOccurrence)
 # model is still overdispersed
 summary(fit.glmer2)
 
@@ -217,8 +221,41 @@ ggsave(ForbsVsGrass, filename = "Output/ForbsVsGrass.jpeg", dpi = 300, width = 8
 
 
 ### GLMER
-# Cannot fit glmer model
+fit.glmer.fG <- glmer(PropFertile ~ year * functionalGroup * temperature_level + (1|siteID), data = fertile, family = "binomial", weights = NumberOfOccurrence)
+summary(fit.glmer.fG)
 
+newdatFG <- expand.grid(
+  year = factor(c("2009", "2011", "2012", "2013", "2015", "2016", "2017")),
+  temperature_level = factor(c(1, 2, 3)),
+  functionalGroup = c("graminoid", "forb")
+)
+
+newdatFG$PropFertile <- predict(fit.glmer.fG, newdatFG, re.form = NA)
+mm <- model.matrix(terms(fit.glmer.fG), newdatFG)
+pvar1 <- diag(mm %*% tcrossprod(vcov(fit.glmer.fG), mm))
+cmult <- 1.96 ## could use 1.96
+
+newdatFG <- newdatFG %>% 
+  mutate(plo = plogis(PropFertile - cmult*sqrt(pvar1)),
+         phi = plogis(PropFertile + cmult*sqrt(pvar1)),
+         PropFertile = plogis(PropFertile)) %>% 
+  group_by(year, temperature_level, functionalGroup) %>% 
+  summarise(PropFertile = mean(PropFertile), plo = mean(plo), phi = mean(phi)) %>% 
+  ungroup() %>%
+  mutate(year = as.Date(as.character(year), format = "%Y")) %>% 
+  mutate(year = year(year))
+
+
+#plot confidence
+FertilFGGLMER <- newdatFG %>%
+  ggplot(aes(x = year, y = PropFertile, color = temperature_level)) + 
+  geom_point(size = 3, position = position_dodge(width = 0.3)) +
+  geom_pointrange(aes(ymin = plo, ymax = phi), position = position_dodge(width = 0.3)) +
+  scale_color_manual(name = "Temperature level", labels = c("alpine", "subalpine", "boreal"), values = c("#56B4E9", "#E69F00", "#D55E00")) +
+  scale_x_continuous(breaks = c(2010, 2012, 2014, 2016)) +
+  labs(y = "Proportion of fertile", x = "") +
+  facet_wrap(~ functionalGroup)
+ggsave(FertilFGGLMER, filename = "Output/FertilFGGLMER.jpeg", dpi = 300, width = 8, height = 5)
 
 
 
@@ -305,15 +342,18 @@ res %>%
 
 fertileClimate %>% 
   gather(key = Climate, value = value, AnnPrec, MeanSummerTemp, MeanTemp, PrevAnnPrec, PrevMeanSummerTemp, PrevMeanTemp) %>%
-  group_by(year, functionalGroup, Climate) %>% 
-  mutate(mean = mean(PropFertile)) %>% 
-  ggplot(aes(x = value, y = mean, color = factor(year))) +
+  #group_by(functionalGroup, Climate) %>% 
+  #mutate(mean = mean(PropFertile)) %>% 
+  ggplot(aes(x = value, y = PropFertile)) +
   geom_point() +
   facet_grid(functionalGroup ~ Climate, scales = "free_x")
 
 
 
 augment(modClimateGR) %>% 
-  ggplot(aes(x = MeanTemp, y = PropFertile)) +
+  mutate(response = plogis(.fitted)) %>% 
+  gather(key = Climate, value = value, AnnPrec, MeanSummerTemp, MeanTemp, PrevAnnPrec, PrevMeanSummerTemp, PrevMeanTemp) %>% 
+  ggplot(aes(x = value, y = response)) +
   geom_point() + 
-  geom_smooth(method = "lm")
+  facet_wrap(~ Climate, scales = "free_x")
+
