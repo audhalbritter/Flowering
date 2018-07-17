@@ -271,7 +271,15 @@ ClimatePlot <- monthlyClimate %>%
   mutate(Value = ifelse(Logger == "Precipitation", sum, mean)) %>% 
   select(-n, -sum, -mean) %>% 
   spread(key = Logger, value = Value) %>% 
-  c %>% 
+  mutate(Temperature_level = case_when(Site %in% c("Ulv", "Lav", "Gud", "Skj") ~ "alpine",
+                                       Site %in% c("Alr", "Hog", "Ram", "Ves") ~ "subalpine",
+                                       Site %in% c("Fau", "Vik", "Arh", "Ovs") ~ "boreal")) %>% 
+  mutate(Temperature_level = factor(Temperature_level, levels = c("alpine", "subalpine", "boreal"))) %>% 
+  mutate(Precipitation_level = case_when(Site %in% c("Ulv", "Alr", "Fau") ~ "500mm",
+                                         Site %in% c("Lav", "Hog", "Vik") ~ "1200mm",
+                                         Site %in% c("Gud", "Ram", "Arh") ~ "2000mm",
+                                         TRUE ~ "2700mm")) %>% 
+  mutate(Precipitation_level = factor(Precipitation_level, levels =  c("500mm", "1200mm", "2000mm", "2700mm"))) %>% 
   ggplot(aes(x = Temperature, y = Precipitation, colour = factor(Year))) +
   geom_point() +
   labs(x = "Mean summer temperature in °C", y = "Annual precipitation in mm") +
