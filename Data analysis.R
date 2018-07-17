@@ -271,15 +271,7 @@ ClimatePlot <- monthlyClimate %>%
   mutate(Value = ifelse(Logger == "Precipitation", sum, mean)) %>% 
   select(-n, -sum, -mean) %>% 
   spread(key = Logger, value = Value) %>% 
-  mutate(Temperature_level = case_when(Site %in% c("Ulv", "Lav", "Gud", "Skj") ~ "alpine",
-                                       Site %in% c("Alr", "Hog", "Ram", "Ves") ~ "subalpine",
-                                       TRUE ~ "boreal")) %>% 
-  mutate(Temperature_level = factor(Temperature_level, levels = c("alpine", "subalpine", "boreal"))) %>% 
-  mutate(Precipitation_level = case_when(Site %in% c("Ulv", "Alr", "Fau") ~ "500mm",
-                                         Site %in% c("Lav", "Hog", "Vik") ~ "1200mm",
-                                         Site %in% c("Gud", "Ram", "Arh") ~ "2000mm",
-                                         TRUE ~ "2700mm")) %>% 
-  mutate(Precipitation_level = factor(Precipitation_level, levels =  c("500mm", "1200mm", "2000mm", "2700mm"))) %>% 
+  c %>% 
   ggplot(aes(x = Temperature, y = Precipitation, colour = factor(Year))) +
   geom_point() +
   labs(x = "Mean summer temperature in °C", y = "Annual precipitation in mm") +
@@ -300,45 +292,70 @@ fertileClimate <- fertile %>%
   filter(lifeSpan != "annual") %>% # remove annuals, because previous year climate does not affect them, they have to flower
   mutate(site = substr(siteID, 1, 3)) %>% 
   # Join Climate data
-  left_join(Climate, by =c("site" = "Site", "year2" = "Year")) %>%
+  left_join(Climate, by =c("site" = "Site", "year" = "Year")) %>%
   # Join Climate data from previous year
-  mutate(PreviousYear = year2 - 1) %>% 
+  mutate(PreviousYear = year - 1) %>% 
   left_join(Climate, by =c("site" = "Site", "PreviousYear" = "Year")) %>%
-  rename(AnnPrec = AnnPrec.x, MeanSummerTemp = MeanSummerTemp.x, MeanTemp = MeanTemp.x, PrevAnnPrec = AnnPrec.y, PrevMeanSummerTemp = MeanSummerTemp.y, PrevMeanTemp = MeanTemp.y)
+  rename(AnnPrec = AnnPrec.x, MeanSummerTemp = MeanSummerTemp.x, MeanTemp = MeanTemp.x, PrevAnnPrec = AnnPrec.y, PrevMeanSummerTemp = MeanSummerTemp.y, PrevMeanTemp = MeanTemp.y) %>% 
+  mutate(AnnPrec.cen = scale(AnnPrec),
+         MeanSummerTemp.cen = scale(MeanSummerTemp),
+         MeanTemp.cen = scale(MeanTemp),
+         PrevAnnPrec.cen = scale(PrevAnnPrec),
+         PrevMeanSummerTemp.cen = scale(PrevMeanSummerTemp),
+         PrevMeanTemp.cen = scale(PrevMeanTemp)) 
 
 
-### GRAMINOIDS
-# fit GLM model with all climate variables (need to be this version of the model)
+### Fit GLMER model with all climate variables (need to be this version of the model)
+# Climate variables need to be centered
+# separate model for graminoids and forbs
 gram <- fertileClimate %>% filter(functionalGroup == "graminoid") 
+forb <- fertileClimate %>% filter(functionalGroup == "forb") 
 
-modClimateGR <- glm(PropFertile ~ AnnPrec + MeanSummerTemp + MeanTemp + PrevAnnPrec + PrevMeanSummerTemp + PrevMeanTemp, data = gram, family = "binomial", weights = NumberOfOccurrence)
+modClimateGR <- glmer(PropFertile ~ AnnPrec.cen + MeanSummerTemp.cen + MeanTemp.cen + PrevAnnPrec.cen + PrevMeanSummerTemp.cen + PrevMeanTemp.cen + (1|species) + (1|blockID), data = gram, family = "binomial", weights = NumberOfOccurrence)
 summary(modClimateGR)
 
-percent.thresh <- 0.95
-model.set <- dredge(modClimateGR, rank = "AICc", extra = "R^2")
-#mm <- data.frame(model.set)
-#mm$cumsum <- cumsum(mm$weight)
-#mm95 <- mm %>% filter(cumsum < percent.thresh)
-averaged.model <- model.avg(model.set, subset = cumsum(weight) <= percent.thresh)
-res <- data.frame(summary(averaged.model)$coefmat.full)
-res
+modClimateF <- glmer(PropFertile ~ AnnPrec.cen + MeanSummerTemp.cen + MeanTemp.cen + PrevAnnPrec.cen + PrevMeanSummerTemp.cen + PrevMeanTemp.cen + (1|species) + (1|blockID), data = forb, family = "binomial", weights = NumberOfOccurrence)
+summary(modClimateF)
 
-res %>% 
+# Model selection
+percent.thresh <- 0.95
+
+model.setGR <- dredge(modClimateGR, rank = "AICc", extra = "R^2")
+model.setF <- dredge(modClimateF, rank = "AICc", extra = "R^2")
+
+# Model averageing
+averaged.modelGR <- model.avg(model.setGR, subset = cumsum(weight) <= percent.thresh)
+resGR <- data.frame(summary(averaged.modelGR)$coefmat.full) %>% 
   rownames_to_column(var = "Variable") %>% 
   setNames(., c("Variable", "Estimate", "StError", "AdjSE", "Zvalue", "Pvalue")) %>% 
   mutate(Intercept = first(Estimate), StErrorIntercept = first(StError)) %>% 
   filter(!Variable == "(Intercept)") %>% 
   mutate(Estimate = Estimate + Intercept, StError = StError + StErrorIntercept) %>% 
-  # Backtransform to response scale
-  mutate(CI.low = plogis(Estimate - 1.96 * StError), CI.high = plogis(Estimate + 1.96 * StError)) %>% 
-  mutate(Estimate = plogis(Estimate)) %>% 
-  ggplot(aes(x = Variable, y = Estimate, ymin = CI.low, ymax = CI.high)) + 
-  geom_point() +
-  labs(x = "") +
-  geom_hline(yintercept = 0, color = "grey") +
-  geom_errorbar(width=0.25) + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  mutate(CI.low = Estimate - 1.96 * StError, CI.high = Estimate + 1.96 * StError) %>% 
+  mutate(functionalGroup = "graminoid")
+resGR
 
+averaged.modelF <- model.avg(model.setF, subset = cumsum(weight) <= percent.thresh)
+resF <- data.frame(summary(averaged.modelF)$coefmat.full) %>% 
+  rownames_to_column(var = "Variable") %>% 
+  setNames(., c("Variable", "Estimate", "StError", "AdjSE", "Zvalue", "Pvalue")) %>% 
+  mutate(Intercept = first(Estimate), StErrorIntercept = first(StError)) %>% 
+  filter(!Variable == "(Intercept)") %>% 
+  mutate(Estimate = Estimate + Intercept, StError = StError + StErrorIntercept) %>% 
+  mutate(CI.low = Estimate - 1.96 * StError, CI.high = Estimate + 1.96 * StError) %>%
+  mutate(functionalGroup = "forb")
+resF
+
+ResponseClimate <- resGR %>% 
+  bind_rows(resF) %>% 
+  ggplot(aes(y = Variable, x = Estimate, xmin = CI.low, xmax = CI.high, color = Pvalue < 0.05)) + 
+  geom_vline(xintercept = 0, color = "grey", linetype = "dashed") +
+  geom_point() +
+  scale_color_manual(name = "P value", values = c("black", "#D55E00")) +
+  labs(x = "Estimate", y = "") +
+  geom_errorbarh(height = 0) + 
+  facet_grid(~ functionalGroup)
+ggsave(ResponseClimate, filename = "Output/ResponseClimate.jpeg", dpi = 300, width = 8, height = 5)
 
 fertileClimate %>% 
   gather(key = Climate, value = value, AnnPrec, MeanSummerTemp, MeanTemp, PrevAnnPrec, PrevMeanSummerTemp, PrevMeanTemp) %>%
@@ -351,7 +368,7 @@ fertileClimate %>%
 
 
 augment(modClimateGR) %>% 
-  mutate(response = plogis(.fitted)) %>% 
+  mutate(response = plogis(.fixed)) %>% 
   gather(key = Climate, value = value, AnnPrec, MeanSummerTemp, MeanTemp, PrevAnnPrec, PrevMeanSummerTemp, PrevMeanTemp) %>% 
   ggplot(aes(x = value, y = response)) +
   geom_point() + 
