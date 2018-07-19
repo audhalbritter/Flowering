@@ -4,6 +4,7 @@
 library("RSQLite")
 #library("DBI")
 library("tidyverse")
+library("lubridate")
 
 
 # Stuff
@@ -108,8 +109,8 @@ monthlyClimate <- climate %>%
 # get annual values
 summer <- monthlyClimate %>% 
   filter(Logger == "Temperature" & month(Date) %in% 6:9) %>%
-  mutate(Year = year(Date)) %>% 
-  group_by(Year, Site, Logger) %>%
+  mutate(Year2 = year(Date)) %>% 
+  group_by(Year2, Site, Logger) %>%
   summarise(n = n(), Value = mean(Value)) %>% 
   mutate(Logger = "MeanSummerTemp") %>% 
   select(-n)
@@ -117,12 +118,14 @@ summer <- monthlyClimate %>%
 
 Climate <- monthlyClimate %>%
   mutate(Year = year(Date)) %>% 
-  group_by(Year, Site, Logger) %>%
-  summarise(n = n(), mean = mean(Value), sum = sum(Value)) %>% 
-  mutate(Value = ifelse(Logger == "Precipitation", sum, mean)) %>% 
-  select(-n, -sum, -mean) %>% 
+  mutate(Year2 = if_else(month(Date) > 7, Year + 1, Year)) %>% 
+  group_by(Year2, Site, Logger) %>%
+  summarise(n = n(), Value = sum(Value)) %>% 
+  filter(Logger == "Precipitation") %>% 
+  select(-n) %>% 
   bind_rows(summer) %>% 
   spread(key = Logger, value = Value) %>% 
-  rename(AnnPrec = Precipitation, MeanTemp = Temperature)
+  rename(AnnPrec = Precipitation)
+  
 
 
