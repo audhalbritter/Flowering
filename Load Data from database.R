@@ -28,8 +28,8 @@ fertile <- tbl(con, "subTurfCommunity") %>%
   select(turfID, subTurf, year, species, fertile, dominant) %>% # could also be interesting to import: seedlings, juvenile, adult, vegetative
   left_join(tbl(con, "turfs"), by = "turfID") %>% 
   
-  # only control plots
-  filter(TTtreat %in% c("TTC", "TT1")) %>%
+  # only control plots and RTC
+  filter(TTtreat %in% c("TTC", "TT1") | RTtreat == "RTC") %>% 
   select(-RTtreat, -GRtreat, -destinationPlotID) %>% 
   
   left_join(tbl(con, "plots"), by = c("originPlotID" = "plotID")) %>% 
@@ -41,7 +41,8 @@ fertile <- tbl(con, "subTurfCommunity") %>%
   # Calculate stuff
   group_by(turfID, year, species, siteID, blockID, originPlotID, TTtreat, temperature_level, precipitation_level, annualPrecipitation_gridded, summerTemperature_gridded) %>% 
   summarize(SumOffertile = sum(fertile), NumberOfOccurrence = n()) %>% # loos colums here, need to add in group_by above if I need to keep more columns
-  mutate(PropFertile = SumOffertile / NumberOfOccurrence)
+  mutate(PropFertile = SumOffertile / NumberOfOccurrence) %>% 
+  mutate(Experiment = ifelse(is.na(TTtreat), "RTC", "SeedClim"))
 
 
 # Load taxon and trait data
