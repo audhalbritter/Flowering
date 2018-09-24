@@ -70,7 +70,7 @@ fertile <- fertile %>%
 
 ### Data curation  
 fertile <- fertile %>% 
-  filter(year != 2010) %>% # remove first year, because of fence effect
+  #filter(year != 2010) %>% # remove first year, because of fence effect
   # remove species that occur in less than 3 years
   group_by(turfID, species) %>% 
   mutate(nYears = n()) %>%
