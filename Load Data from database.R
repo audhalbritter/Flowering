@@ -28,8 +28,8 @@ fertile <- tbl(con, "subTurfCommunity") %>%
   select(turfID, subTurf, year, species, fertile, dominant) %>% # could also be interesting to import: seedlings, juvenile, adult, vegetative
   left_join(tbl(con, "turfs"), by = "turfID") %>% 
   
-  # only control plots and RTC
-  filter(TTtreat %in% c("TTC", "TT1") | RTtreat == "RTC") %>% 
+  # only control plots
+  filter(TTtreat %in% c("TTC", "TT1")) %>% 
   select(-RTtreat, -GRtreat, -destinationPlotID) %>% 
   
   left_join(tbl(con, "plots"), by = c("originPlotID" = "plotID")) %>% 
@@ -70,7 +70,7 @@ fertile <- fertile %>%
 
 ### Data curation  
 fertile <- fertile %>% 
-  #filter(year != 2010) %>% # remove first year, because of fence effect
+  filter(year != 2010) %>% # remove 2010, no data
   # remove species that occur in less than 3 years
   group_by(turfID, species) %>% 
   mutate(nYears = n()) %>%
