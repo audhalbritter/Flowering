@@ -1,8 +1,9 @@
 #### DATA ANALYSIS ####
 # Load libraries
 library("lme4")
-library("broom")
 library("emmeans")
+library("cowplot")
+library("broom")
 
 # Load data
 source("Load Data from database.R")
@@ -83,7 +84,7 @@ fertile %>%
 
 # get confint
 newdat <- expand.grid(
-  year = factor(c("2009", "2011", "2012", "2013", "2015", "2016", "2017"))
+  year = factor(c("2009", "2010", "2011", "2012", "2013", "2015", "2016", "2017"))
 )
 newdat$PropFertile <- predict(fit.glmer, newdat, re.form = NA)
 mm <- model.matrix(terms(fit.glmer), newdat)
@@ -147,7 +148,7 @@ ggsave(FertilAcrossGrid, filename = "Output/FertilAcrossGrid.jpeg", dpi = 300, w
 
 
 # fit GLMER model
-fit.glmer2 <- glmer(PropFertile ~ year + temperature_level * precipitation_level + (1|species) + (1|siteID), data = fertile, family = "binomial", weights = NumberOfOccurrence)
+fit.glmer2 <- glmer(PropFertile ~ factor(year) + temperature_level * precipitation_level + (1|species) + (1|siteID), data = fertile, family = "binomial", weights = NumberOfOccurrence)
 # model is still overdispersed
 summary(fit.glmer2)
 
@@ -221,7 +222,7 @@ ggsave(ForbsVsGrass, filename = "Output/ForbsVsGrass.jpeg", dpi = 300, width = 8
 
 
 ### GLMER
-fit.glmer.fG <- glmer(PropFertile ~ year * functionalGroup * temperature_level + (1|siteID), data = fertile, family = "binomial", weights = NumberOfOccurrence)
+fit.glmer.fG <- glmer(PropFertile ~ factor(year) * functionalGroup * temperature_level + (1|siteID), data = fertile, family = "binomial", weights = NumberOfOccurrence)
 summary(fit.glmer.fG)
 
 newdatFG <- expand.grid(
@@ -273,7 +274,7 @@ ClimatePlot <- monthlyClimate %>%
   spread(key = Logger, value = Value) %>% 
   mutate(Temperature_level = case_when(Site %in% c("Ulv", "Lav", "Gud", "Skj") ~ "alpine",
                                        Site %in% c("Alr", "Hog", "Ram", "Ves") ~ "subalpine",
-                                       Site %in% c("Fau", "Vik", "Arh", "Ovs") ~ "boreal")) %>% 
+                                       TRUE ~ "boreal")) %>% 
   mutate(Temperature_level = factor(Temperature_level, levels = c("alpine", "subalpine", "boreal"))) %>% 
   mutate(Precipitation_level = case_when(Site %in% c("Ulv", "Alr", "Fau") ~ "500mm",
                                          Site %in% c("Lav", "Hog", "Vik") ~ "1200mm",
@@ -289,96 +290,74 @@ ClimatePlot <- monthlyClimate %>%
 ggsave(ClimatePlot, filename = "Output/ClimatePlot.jpeg", dpi = 300, width = 8, height = 5)
 
 
-# Model selection and averaging
-library("MuMIn")
-options(na.action = "na.fail") # can also be put in the model
-options(na.action = "na.omit")
-
 # Join climate data with fertil and also join previous year climate data
 fertileClimate <- fertile %>% 
   filter(year != "2009") %>% # remove 2009, because no climate data
   filter(lifeSpan != "annual") %>% # remove annuals, because previous year climate does not affect them, they have to flower
   mutate(site = substr(siteID, 1, 3)) %>% 
   # Join Climate data
-  left_join(Climate, by =c("site" = "Site", "year" = "Year")) %>%
+  left_join(Climate, by =c("site" = "Site", "year" = "Year2")) %>%
   # Join Climate data from previous year
   mutate(PreviousYear = year - 1) %>% 
-  left_join(Climate, by =c("site" = "Site", "PreviousYear" = "Year")) %>%
-  rename(AnnPrec = AnnPrec.x, MeanSummerTemp = MeanSummerTemp.x, MeanTemp = MeanTemp.x, PrevAnnPrec = AnnPrec.y, PrevMeanSummerTemp = MeanSummerTemp.y, PrevMeanTemp = MeanTemp.y) %>% 
+  left_join(Climate, by =c("site" = "Site", "PreviousYear" = "Year2")) %>%
+  rename(AnnPrec = AnnPrec.x, MeanSummerTemp = MeanSummerTemp.x, PrevAnnPrec = AnnPrec.y, PrevMeanSummerTemp = MeanSummerTemp.y) %>% 
+  mutate(SummerTemperatureAverage = case_when(siteID %in% c("Ulv", "Lav", "Gud", "Skj") ~ 6.5,
+                                              siteID %in% c("Alr", "Hog", "Ram", "Ves") ~ 8.5,
+                                              TRUE ~ 10.5)) %>% 
+  mutate(PrecipitationAverage = case_when(siteID %in% c("Ulv", "Alr", "Fau") ~ 500,
+                                          siteID %in% c("Lav", "Hog", "Vik") ~ 1200,
+                                          siteID %in% c("Gud", "Ram", "Arh") ~ 2000,
+                                          TRUE ~ 2700)) %>% 
+  # Calculate annomalies
+  mutate(AnnPrecAnnomalie = AnnPrec - PrecipitationAverage,
+         PrevAnnPrecAnnomalie = PrevAnnPrec - PrecipitationAverage,
+         MeanSummerTempAnnomalie = MeanSummerTemp - SummerTemperatureAverage,
+         PrevMeanSummerTempAnnomalie = PrevMeanSummerTemp - SummerTemperatureAverage) %>% 
+  # centre and scale data
   mutate(AnnPrec.cen = scale(AnnPrec),
          MeanSummerTemp.cen = scale(MeanSummerTemp),
-         MeanTemp.cen = scale(MeanTemp),
          PrevAnnPrec.cen = scale(PrevAnnPrec),
-         PrevMeanSummerTemp.cen = scale(PrevMeanSummerTemp),
-         PrevMeanTemp.cen = scale(PrevMeanTemp)) 
+         PrevMeanSummerTemp.cen = scale(PrevMeanSummerTemp)) %>% 
+  mutate(AnnPrecAnnomalie.cen = scale(AnnPrecAnnomalie),
+         MeanSummerTempAnnomalie.cen = scale(MeanSummerTempAnnomalie),
+         PrevAnnPrecAnnomalie.cen = scale(PrevAnnPrecAnnomalie),
+         PrevMeanSummerTempAnnomalie.cen = scale(PrevMeanSummerTempAnnomalie)) 
 
 
 ### Fit GLMER model with all climate variables (need to be this version of the model)
 # Climate variables need to be centered
 # separate model for graminoids and forbs
-gram <- fertileClimate %>% filter(functionalGroup == "graminoid") 
-forb <- fertileClimate %>% filter(functionalGroup == "forb") 
 
-modClimateGR <- glmer(PropFertile ~ AnnPrec.cen + MeanSummerTemp.cen + MeanTemp.cen + PrevAnnPrec.cen + PrevMeanSummerTemp.cen + PrevMeanTemp.cen + (1|species) + (1|blockID), data = gram, family = "binomial", weights = NumberOfOccurrence)
+# GRMINOIDS
+gram <- fertileClimate %>% filter(functionalGroup == "graminoid") 
+
+modClimateGR <- glmer(PropFertile ~ AnnPrecAnnomalie.cen + MeanSummerTempAnnomalie.cen + PrevAnnPrecAnnomalie.cen + PrevMeanSummerTempAnnomalie.cen + (1|species) + (AnnPrecAnnomalie.cen - 1|species) + (MeanSummerTempAnnomalie.cen - 1|species) + (PrevAnnPrecAnnomalie.cen - 1|species) + (PrevMeanSummerTempAnnomalie.cen - 1|species) + (1|blockID), data = gram, family = "binomial", weights = NumberOfOccurrence)
 summary(modClimateGR)
 
-modClimateF <- glmer(PropFertile ~ AnnPrec.cen + MeanSummerTemp.cen + MeanTemp.cen + PrevAnnPrec.cen + PrevMeanSummerTemp.cen + PrevMeanTemp.cen + (1|species) + (1|blockID), data = forb, family = "binomial", weights = NumberOfOccurrence)
+
+### FORB
+forb <- fertileClimate %>% filter(functionalGroup == "forb") 
+
+modClimateF <- glmer(PropFertile ~ AnnPrecAnnomalie.cen + MeanSummerTempAnnomalie.cen + PrevMeanSummerTempAnnomalie.cen + (1|species) + (AnnPrecAnnomalie.cen - 1|species) + (MeanSummerTempAnnomalie.cen - 1|species) + (PrevMeanSummerTempAnnomalie.cen - 1|species), data = forb, family = "binomial", weights = NumberOfOccurrence)
 summary(modClimateF)
 
-# Model selection
-percent.thresh <- 0.95
-
-model.setGR <- dredge(modClimateGR, rank = "AICc", extra = "R^2")
-model.setF <- dredge(modClimateF, rank = "AICc", extra = "R^2")
-
-# Model averageing
-averaged.modelGR <- model.avg(model.setGR, subset = cumsum(weight) <= percent.thresh)
-resGR <- data.frame(summary(averaged.modelGR)$coefmat.full) %>% 
-  rownames_to_column(var = "Variable") %>% 
-  setNames(., c("Variable", "Estimate", "StError", "AdjSE", "Zvalue", "Pvalue")) %>% 
-  mutate(Intercept = first(Estimate), StErrorIntercept = first(StError)) %>% 
-  filter(!Variable == "(Intercept)") %>% 
-  mutate(Estimate = Estimate + Intercept, StError = StError + StErrorIntercept) %>% 
-  mutate(CI.low = Estimate - 1.96 * StError, CI.high = Estimate + 1.96 * StError) %>% 
-  mutate(functionalGroup = "graminoid")
-resGR
-
-averaged.modelF <- model.avg(model.setF, subset = cumsum(weight) <= percent.thresh)
-resF <- data.frame(summary(averaged.modelF)$coefmat.full) %>% 
-  rownames_to_column(var = "Variable") %>% 
-  setNames(., c("Variable", "Estimate", "StError", "AdjSE", "Zvalue", "Pvalue")) %>% 
-  mutate(Intercept = first(Estimate), StErrorIntercept = first(StError)) %>% 
-  filter(!Variable == "(Intercept)") %>% 
-  mutate(Estimate = Estimate + Intercept, StError = StError + StErrorIntercept) %>% 
-  mutate(CI.low = Estimate - 1.96 * StError, CI.high = Estimate + 1.96 * StError) %>%
+modF <- tidy(modClimateF) %>% 
+  filter(!term == "(Intercept)", group == "fixed") %>% 
+  mutate(CI.low = estimate - 1.96 * std.error, CI.high = estimate + 1.96 * std.error) %>% 
   mutate(functionalGroup = "forb")
-resF
 
-ResponseClimate <- resGR %>% 
-  bind_rows(resF) %>% 
-  ggplot(aes(y = Variable, x = Estimate, xmin = CI.low, xmax = CI.high, color = Pvalue < 0.05)) + 
+
+EffectClimate <- tidy(modClimateGR) %>% 
+  filter(!term == "(Intercept)", group == "fixed") %>% 
+  mutate(CI.low = estimate - 1.96 * std.error, CI.high = estimate + 1.96 * std.error) %>% 
+  mutate(functionalGroup = "graminoid") %>% 
+  bind_rows(modF) %>% 
+  mutate(term = plyr::mapvalues(term, c("AnnPrecAnnomalie.cen", "MeanSummerTempAnnomalie.cen", "PrevAnnPrecAnnomalie.cen", "PrevMeanSummerTempAnnomalie.cen"), c("Aug - Jul precipitation", "Summer mean temperature", "Previous year Aug - Jul precipitation", "Previous summer mean temperature"))) %>% 
+  mutate(term = factor(term, levels =  c("Previous year Aug - Jul precipitation", "Previous summer mean temperature", "Aug - Jul precipitation", "Summer mean temperature"))) %>% 
+  ggplot(aes(x = estimate, y = term, xmin = CI.low, xmax = CI.high)) +
   geom_vline(xintercept = 0, color = "grey", linetype = "dashed") +
   geom_point() +
-  scale_color_manual(name = "P value", values = c("black", "#D55E00")) +
-  labs(x = "Estimate", y = "") +
-  geom_errorbarh(height = 0) + 
-  facet_grid(~ functionalGroup)
-ggsave(ResponseClimate, filename = "Output/ResponseClimate.jpeg", dpi = 300, width = 8, height = 5)
-
-fertileClimate %>% 
-  gather(key = Climate, value = value, AnnPrec, MeanSummerTemp, MeanTemp, PrevAnnPrec, PrevMeanSummerTemp, PrevMeanTemp) %>%
-  #group_by(functionalGroup, Climate) %>% 
-  #mutate(mean = mean(PropFertile)) %>% 
-  ggplot(aes(x = value, y = PropFertile)) +
-  geom_point() +
-  facet_grid(functionalGroup ~ Climate, scales = "free_x")
-
-
-
-augment(modClimateGR) %>% 
-  mutate(response = plogis(.fixed)) %>% 
-  gather(key = Climate, value = value, AnnPrec, MeanSummerTemp, MeanTemp, PrevAnnPrec, PrevMeanSummerTemp, PrevMeanTemp) %>% 
-  ggplot(aes(x = value, y = response)) +
-  geom_point() + 
-  facet_wrap(~ Climate, scales = "free_x")
-
+  geom_errorbarh(height = 0.2) +
+  labs(x = "Coefficient", y = "", title = "Effect of climate annomalies on fertility") +
+  facet_wrap(~ functionalGroup)
+ggsave(EffectClimate, filename = "Output/EffectClimate.jpeg", dpi = 300, width = 8, height = 5)
