@@ -236,7 +236,8 @@ cat(
 
   # linear predictor with year as fixed and species and block as random effects
   # logit link function
-  logit(p[i]) <- interceptCoeff + beta.Year[Year[i]] + speciesCoeff[species[i]] + blockCoeff[blockID[i]] + eps[i] 
+  #logit(p[i]) <- beta.Year[Year[i]]
+  logit(p[i]) <- beta.Year[Year[i]] + speciesCoeff[species[i]] + siteCoeff[siteID[i]] + blockCoeff[blockID[i]] + eps[i] 
 
   # Fix overdispersion
   eps[i] ~ dnorm(0, tau.eps) 
@@ -244,44 +245,35 @@ cat(
   
   # PRIORS
   # Fixed effects
-
-  
-  beta.Year[1] <- 0
-  for(k in 2:n.year){
+  for(k in 1:n.year){
   beta.Year[k] ~ dnorm(0,0.001)
   }
-
-  interceptCoeff ~ dnorm(0,0.001) # The intercept term  
-
-  # binary variable to indicate flowering
-  p.Inc ~ dbeta(1,1)
-  tau.eps ~ dgamma(0.001,0.001)
-
+ 
   # Random effects
   for(j in 1:nSpecies) {
   speciesCoeff[j] ~ dnorm(0, randPrecSP)
   }
   randPrecSP ~ dgamma(0.001,0.001)
-
+  
   for(k in 1:nBlock) {
   blockCoeff[k] ~ dnorm(0, randPrecBlock)
   }
   randPrecBlock ~ dgamma(0.001,0.001)
+  
+  for(l in 1:nSite) {
+  siteCoeff[l] ~ dnorm(0, randPrecSite)
+  }
+  randPrecSite ~ dgamma(0.001,0.001)
 
+  # binary variable to indicate flowering
+  p.Inc ~ dbeta(1,1)
+  tau.eps ~ dgamma(0.001,0.001)
 
-  # PREDICTIONS
-  for (i in 1:nData.pred) {
-  # binomial
-  Fertile.pred[i] ~ dbin(p.pred[i], N.pred[i])
-  # linear predictor and logit link function
-  logit(p.pred[i]) <- interceptCoeff + beta.Year[Year.pred[i]] + speciesCoeff[species.pred[i]] + blockCoeff[blockID.pred[i]] + eps.pred[i]
+  }
 
-  # Overdispersion error term
-  eps.pred[i] ~ dnorm(0, tau.eps)  }
-
-}
   ", file = tempFileLoc)
 
+  
 
 
 Dat <- fertile %>% 
@@ -294,6 +286,8 @@ Data = list(N = Dat$NumberOfOccurrence,
             nSpecies = nlevels(as.factor(Dat$species)),
             blockID = as.numeric(as.factor(Dat$blockID)),
             nBlock = nlevels(as.factor(Dat$blockID)),
+            siteID = as.numeric(as.factor(Dat$siteID)),
+            nSite = nlevels(as.factor(Dat$siteID)),
             nData = nrow(Dat),
             n.year = length(unique(Dat$year)),
             
@@ -306,14 +300,18 @@ Data = list(N = Dat$NumberOfOccurrence,
             )
 
 # 3) Specify a function to generate inital values for the parameters
-n.year = length(unique(Dat$year))
-inits.fn <- function() list(interceptCoeff = rnorm(1, 0.1, 0.05),
-                            tau.eps = runif(1,1,10)
+inits.fn <- function() list(beta.Year = rnorm(3, 0, 0.1),
+                            p.Inc = rbeta(1, 1, 1),
+                            Inc = rep(1, nrow(Dat)),
+                            tau.eps = 1,
+                            speciesCoeff = rnorm(length(unique(Dat$species)), 0, 0.1),
+                            siteCoeff = rnorm(length(unique(Dat$siteID)), 0, 0.1),
+                            blockCoeff = rnorm(length(unique(Dat$blockID)), 0, 0.1)
 )
 
 
 
-para.names <- c('interceptCoeff', 'beta.Year', 'tau.eps')
+para.names <- c('beta.Year')
 #para.names <- c('beta.Year', 'tau.eps', 'speciesCoeff')
 
 # Run analysis
@@ -321,18 +319,24 @@ out <- jags(data = Data,
             inits = inits.fn,
             parameters.to.save = para.names,
             model.file = tempFileLoc,
-            n.chains = 3,
+            n.chains = 1,
             n.adapt = 100,
             n.iter = 1000,
             n.burnin = 500,
             n.thin = 2,
             n.cores = 3)
 
+
+
 plot(out)
+print(out, dig = 3)
+
+str(out)
+names(out)
+
+out$samples[[1]]
 
 
-
-summary(Samples)
 
 gelman.diag(Samples)
 gelman.plot(Samples)
@@ -351,3 +355,18 @@ res = createDHARMa(simulatedResponse = t(Pred.Mat),
                    fittedPredictedResponse = apply(Pred.Mat, 2, median))
 plot(res)
 
+
+
+
+
+
+
+# PREDICTIONS
+for (i in 1:nData.pred) {
+  # binomial
+  Fertile.pred[i] ~ dbin(p.pred[i], N.pred[i])
+  # linear predictor and logit link function
+  logit(p.pred[i]) <- interceptCoeff + beta.Year[Year.pred[i]] + speciesCoeff[species.pred[i]] + blockCoeff[blockID.pred[i]] + eps.pred[i]
+  
+  # Overdispersion error term
+  eps.pred[i] ~ dnorm(0, tau.eps)  }
