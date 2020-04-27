@@ -92,15 +92,6 @@ ggplot(dd, aes(x = Year, y = PropFertile, colour = species, linetype = functiona
 
 
 
-# QUESTIONS
-# should I only use species with a certain abundance? should be present in at least 2 subplots? Otherwise 0 or 100% flowering
-# remove species that only occur (cover) in less than 3 or 4 years
-# Do I only want "original" plant or also invaders
-# remove first year data
-
-
-
-
 
 # Load Climate data
 load("~/Dropbox/Bergen/SeedClim Climate/SeedClim-Climate-Data/Monthly.Temperature_2008-2017.RData", verbose=TRUE)
@@ -123,8 +114,8 @@ load("~/Dropbox/Bergen/SeedClim Climate/SeedClim-Climate-Data/GriddedMonth_Annua
 annual <- monthlyClimate %>% 
   filter(Logger %in% c("Precipitation", "Temperature")) %>% 
   mutate(year = year(dateMonth)) %>% 
-  group_by(Site, Logger, year) %>% 
   spread(key = Logger, value = value) %>% 
+  group_by(Site, year) %>% 
   summarise(AnnPrec = sum(Precipitation, na.rm = TRUE), MeanTemp = mean(Temperature, na.rm = TRUE)) %>% 
   rename(site = Site) %>% 
   gather(key = variable, value = value, MeanTemp, AnnPrec)
@@ -178,19 +169,25 @@ fertileC <- fertile %>%
 
 
 # Proportion flowering over time
-ggplot(fertileC, aes(x = Year, y = PropFertile, color = factor(Temperature_level))) +
-  geom_smooth(method = 'loess', formula = y ~ x) +
+fertile %>% 
+  group_by(year, temperature_level, precipitation_level) %>% 
+  summarise(mean = mean(PropFertile), n = n(), se = sd(PropFertile)/sqrt(n)) %>% 
+  ggplot(aes(x = year, y = mean, ymin = mean - se, ymax = mean + se, color = factor(temperature_level))) +
+  geom_point() +
+  geom_errorbar(width = 0) +
+  geom_line() +
+  #geom_smooth(method = 'loess', formula = y ~ x) +
   scale_color_manual(name = "Temperature level", values = c("#56B4E9", "#E69F00", "#D55E00")) +
   geom_hline(yintercept = 0, colour = "grey", linetype = "dashed") +
   labs(x = "", y = "Proportion fertile") +
-  scale_x_date(date_labels =  "%Y") +
-  facet_grid(functionalGroup ~ Precipitation_level)
+  #scale_x_date(date_labels =  "%Y") +
+  facet_grid(temperature_level ~ precipitation_level)
 
 
 
 # Climate for the different years
 # are there cold an warm years?
-ggplot(Climate, aes(x = AnnPrec, y = MeanSummerTemp, color = factor(year))) +
+ggplot(Climate, aes(x = AnnPrec*10, y = MeanSummerTemp, color = factor(year))) +
   geom_point() +
   facet_grid(Temperature_level ~ Precipitation_level)
 
@@ -215,6 +212,7 @@ ggplot(fertile, aes(x = Year, y = PropFertile, color = newTT)) +
   scale_color_manual(name = "Treatment", values = c("#999999", "#E69F00", "#56B4E9", "#CC79A7")) +
   labs(x = "", y = "Proportion fertile") +
   facet_grid(functionalGroup ~ Temperature_level)
+
 
 
 
