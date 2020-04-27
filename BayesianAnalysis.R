@@ -1,11 +1,35 @@
+###########################
+ #### BINOMIAL MODEL ####
+###########################
+
+#### LOAD LIBRARIES ####
+library("tidyverse")
 library("rjags")
 library("jagsUI")
 library("DHARMa")
+library("lme4")
 
 # logit-link function and inverse
 logit <- function(p) log( p / (1-p) )
 expit <- function(L) exp(L) / (1+exp(L))
 
+#### LOAD DATA ####
+load(file = "FloweringData.Rdata")
+
+Dat <- fertile %>% 
+  filter(year %in% c(2013),
+         siteID %in% c("Lavisdalen", "Hogsete", "Vikesland", "Gudmedalen", "Rambera", "Arhelleren")) %>% 
+  #mutate(MeanSummerTemp.sc = scale(MeanSummerTemp)) %>% 
+  select(siteID, blockID, species, NumberOfOccurrence, SumOffertile, MeanSummerTemp, year, temperature_level, precipitation_level)
+
+Temp.sc <- scale(Dat$MeanSummerTemp) %>% as.tibble()
+Dat <- Dat %>% bind_cols(Temp.sc) %>% 
+  rename(MeanSummerTemp.sc = V1)
+save(Dat, file = "FloweringData.Rdata")
+
+
+
+#### Simple binomial model ####
 tempFileLoc <- tempfile()
 cat(
   "model{
@@ -18,15 +42,15 @@ for (i in 1:nData) {
   
   #priors
   p ~ dbeta(a,b)
-  
+
   }
   ", file = tempFileLoc)
 
-Data = list(N = fertile$NumberOfOccurrence, 
-            Fertile = fertile$SumOffertile, 
+Data = list(N = Dat$NumberOfOccurrence, 
+            Fertile = Dat$SumOffertile, 
             a = 2,
             b = 2,
-            nData = nrow(fertile))
+            nData = nrow(Dat))
 
 inits.fn <- function() list(p = rnorm(1, 0.1, 0.01))
 
@@ -36,191 +60,29 @@ jagsModel <- jags.model(file= tempFileLoc,
                         n.chains = 3, 
                         n.adapt= 1000)
 
-
-# Add Year as covariate
-cat(
-  "model{
-  
-  #Likelihood
-  for (i in 1:nData) {
-  # binomial
-  Fertile[i] ~ dbin(p[i], N[i])
-  # linear predictor 
-  logit(p[i]) <- alpha + beta.Year*Year[i]
-  }
-  
-  #priors
-  alpha ~ dnorm(0,0.001)
-  beta.Year ~ dnorm(0,0.001)
-  
-  }
-  ", file = tempFileLoc)
-
-Data = list(N = fertile$NumberOfOccurrence, 
-            Fertile = fertile$SumOffertile, 
-            Year = as.numeric(fertile$year),
-            nData = nrow(fertile))
-
-inits.fn <- function() list(alpha = rnorm(1, 0.1, 0.05), 
-                            beta.Year = rnorm(1, 0.015, 0.01))
-inits.fn <- function() list(alpha = -1, 
-                            beta.Year = 0)
-
-
-jagsModel <- jags.model(file= tempFileLoc, 
-                        data=Data, 
-                        init = inits.fn, 
-                        n.chains = 3, 
-                        n.adapt= 1000)
-
-
-
-# Add eps to correct for overdispersion
-tempFileLoc <- tempfile()
-cat(
-  "model{
-
-#Likelihood
-for (i in 1:nData) {
-# binomial
-  Fertile[i] ~ dbin(p[i], N[i])
-  # linear predictor und logit link function
-  logit(p[i]) <- alpha + beta.Year*Year[i] + eps[i]
-
-  # overdispersion
-  eps[i] ~ dnorm(0,tau.eps) 
- 
-  }
-  
-  #priors
-  alpha ~ dnorm(0,0.001)
-  beta.Year ~ dnorm(0,0.001)
-  tau.eps ~ dgamma(0.001,0.001)
-
-  }
-", file = tempFileLoc)
-
-
-
-# Prediction
-for (i in 1:nData.pred) {
-  # binomial
-  Fertile.pred[i] ~ dbin(p.pred[i], N.pred[i])
-  # logit link function
-  logit(p.pred[i]) <- mu.pred[i] + eps.pred[i]
-  # linear predictor 
-  mu.pred[i] <- alpha + beta.Year*Year.pred[i]
-  
-  # Overdispersion error term
-  eps.pred[i] ~ dnorm(0,tau.eps)
-}
-
-
-
-# 2) Set up a list that contains all the necessary data.
-# (here including parameters for the prior distribution)
-# Parameters for prior
-Data = list(N = fertile$NumberOfOccurrence,
-            Fertile = fertile$SumOffertile, 
-            Year = fertile$year,
-            nData = nrow(fertile),
-            
-            N.pred = fertile$NumberOfOccurrence,
-            Fertile.pred = fertile$SumOffertile, 
-            Year.pred = fertile$year,
-            nData.pred = nrow(fertile))
-
-# 3) Specify a function to generate inital values for the parameters
-inits.fn <- function() list(alpha = rnorm(1), 
-                            beta.Year = rnorm(1)#, 
-                            #tau.eps = runif(1,1,10)
-                            )
-
-inits.fn <- function() list(alpha = 0.1, 
-                            beta.Year = 0.01#, 
-                            #tau.eps = runif(1,1,10)
-)
-
-
-# Compile the model and run the MCMC for an adaptation (burn-in) phase
-jagsModel <- jags.model(file= tempFileLoc, 
-                        data=Data, 
-                        init = inits.fn, 
-                        n.chains = 3, 
-                        n.adapt= 5000)
-
-# Specify parameters for which posterior samples are saved
-#para.names <- c('p')
-para.names <- c('alpha','beta.Year', 'tau.eps')
-# Continue the MCMC runs with sampling
-Samples <- coda.samples(jagsModel, variable.names = para.names, 
-                        n.iter = 5000)
-
+Samples <- coda.samples(jagsModel, 
+                        variable.names = c("p"), 
+                        n.iter = 500)
 
 # Plot the mcmc chain and the posterior sample for p
 plot(Samples)
 
 # Statistical summaries of the posterior sample for p
 summary(Samples)
+summary(glm(PropFertile  ~ 1, data = Dat, family = "binomial", weights = NumberOfOccurrence))
 
 # convergence check
 gelman.diag(Samples)
 gelman.plot(Samples)
 
-library("BayesianTools")
-correlationPlot(Samples)
-
-effectiveSize(Samples)
-summary(Samples)
-autocorr.plot(Samples)
-rejectionRate(Samples)
-
-# For further analyses it is often useful to
-# transform mcmc.list object to a matrix
-Pars.Mat <- as.matrix(Samples)
-hist(Pars.Mat[,'beta.Year'], freq = FALSE, col = 'blue', breaks = 30)
-# Typical statistics we want to calculate for the
-# posterior sample are the median and the 
-# limits of the 95% confidence interval
-p.med <- median(Pars.Mat[,'beta.Year'])
-abline(v = p.med, lty = 2, lwd = 2)
-CI <- quantile(Pars.Mat[,'beta.Year'], prob = c(0.025,0.975))
-abline(v = CI, lty = 2)
 
 
 
-### Check predictions
-Pred.Samples <- coda.samples(jagsModel, variable.names = "Fertile.pred", 
-                        n.iter = 5000)
+#*****************************************************************************
+#### BINOMIAL GLMER ####
+## Summer temperature as fixed effect, species as random effects
+## Random intercept and slope for species
 
-# Transform mcmc.list object to a matrix
-Pred.Mat <- as.matrix(Pred.Samples)
-
-# Make a histogram for the prediciton for first population (alive)
-hist(Pred.Mat[,1])
-# add a line from the data
-abline(v = fertile$SumOffertile[1], col = "red")
-# Standardize (quantalie) residuals
-# Which prop of pred are larger than observed value
-mean(Pred.Mat[,1] > fertile$SumOffertile[1])
-
-
-# Cretae model checking plots
-# use the data predicted with the model to compare to the actual data
-res = createDHARMa(simulatedResponse = t(Pred.Mat),
-                   observedResponse = fertile$SumOffertile[1:100], 
-                   integerResponse = T, 
-                   fittedPredictedResponse = apply(Pred.Mat, 2, median))
-plot(res)
-
-
-
-
-# GLMER with Year as fixed effect, species and blockID as random effects
-# Overdispersion and zero inflation
-# BlockID nested in site -> site x block
-
-# Model
 tempFileLoc <- tempfile()
 cat(
   "model{
@@ -228,93 +90,192 @@ cat(
   #LIKELIHOOD
   for (i in 1:nData) {
   
-  #binomial model 
-  # with correction for overdispersion and zero inflation
-  #Fertile[i] ~ dbin(p[i], N[i])
-  Fertile[i] ~ dbin(p[i] * Inc[i], N[i])
-  Inc[i] ~ dbern(p.Inc) # zero inflation
-
-  # linear predictor with year as fixed and species and block as random effects
-  # logit link function
-  #logit(p[i]) <- beta.Year[Year[i]]
-  logit(p[i]) <- beta.Year[Year[i]] + speciesCoeff[species[i]] + siteCoeff[siteID[i]] + blockCoeff[blockID[i]] + eps[i] 
-
-  # Fix overdispersion
-  eps[i] ~ dnorm(0, tau.eps) 
+  Fertile[i] ~ dbin(p[i], N[i])
+  logit(p[i]) <- alpha + betaTemp[species[i]] * Temp[i] + speciesCoeff[species[i]]
+  
   }
   
+  alpha ~ dnorm(0, 0.001) # grand intercept
+
   # PRIORS
-  # Fixed effects
-  for(k in 1:n.year){
-  beta.Year[k] ~ dnorm(0,0.001)
+  for(i in 1:nSpecies){
+  speciesCoeff[i] ~ dnorm(mu.int, tau.int) # Intercept for each species
+  betaTemp[i] ~ dnorm(mu.slope, tau.slope) # Slope for each species
   }
- 
-  # Random effects
-  for(j in 1:nSpecies) {
-  speciesCoeff[j] ~ dnorm(0, randPrecSP)
-  }
-  randPrecSP ~ dgamma(0.001,0.001)
   
-  for(k in 1:nBlock) {
-  blockCoeff[k] ~ dnorm(0, randPrecBlock)
-  }
-  randPrecBlock ~ dgamma(0.001,0.001)
+  mu.int ~ dnorm(0, 0.001)
+  tau.int <- 1/(sigma.int * sigma.int)
+  sigma.int ~ dunif(0, 10)
   
-  for(l in 1:nSite) {
-  siteCoeff[l] ~ dnorm(0, randPrecSite)
-  }
-  randPrecSite ~ dgamma(0.001,0.001)
-
-  # binary variable to indicate flowering
-  p.Inc ~ dbeta(1,1)
-  tau.eps ~ dgamma(0.001,0.001)
-
-  }
-
+  mu.slope ~ dnorm(0, 0.001)
+  tau.slope <- 1/(sigma.slope * sigma.slope)
+  sigma.slope ~ dunif(0, 10) 
+}
+  
   ", file = tempFileLoc)
 
   
+Data = list(N = Dat$NumberOfOccurrence,
+            Fertile = Dat$SumOffertile, 
+            Temp = Dat$MeanSummerTemp,
+            species = as.numeric(as.factor(Dat$species)),
+            nSpecies = nlevels(as.factor(Dat$species)),
+            nData = nrow(Dat))
+
+# 3) Specify a function to generate inital values for the parameters
+inits.fn <- function() list(alpha = rnorm(1,1,1),
+                            betaTemp = rnorm(length(unique(Dat$species)), 0, 0.1),
+                            speciesCoeff = rnorm(length(unique(Dat$siteID)), 0, 0.1),
+                            mu.int = rnorm(1, 0, 1),
+                            mu.slope = rnorm(1, 0, 1)
+)
+
+para.names <- c("alpha", "betaTemp", "sigma.int")
 
 
-Dat <- fertile %>% 
-  filter(year %in% c(2009, 2011, 2012))
+jagsModel <- jags.model(file= tempFileLoc, 
+                        data=Data, 
+                        #init = inits.fn, 
+                        n.chains = 3, 
+                        n.adapt= 10000)
+
+Samples <- coda.samples(jagsModel, 
+                        variable.names = para.names,
+                        n.iter = 10000)
+
+# Plot the mcmc chain and the posterior sample for p
+plot(Samples)
+
+# Statistical summaries of the posterior sample for p
+summary(Samples)
+summary(glmer(cbind(SumOffertile, NumberOfOccurrence - SumOffertile)  ~ MeanSummerTemp + (MeanSummerTemp|siteID) + (1|species), data = Dat, family = "binomial", weights = NumberOfOccurrence))
+
+# convergence check
+gelman.diag(Samples)
+gelman.plot(Samples)
+
+
+
+#*****************************************************************************
+#### CORRECTION FOR OVERDISPERSION AND ZERO INFLATION ####
+tempFileLoc <- tempfile()
+cat(
+  "model{
+  
+  #LIKELIHOOD
+  for (i in 1:nData) {
+  Fertile[i] ~ dbin(p[i] * Inc[i], N[i])
+  Inc[i] ~ dbern(p.Inc) # zero inflation
+  logit(p[i]) <- alpha + betaTemp[species[i]] * Temp[i] + speciesCoeff[species[i]] + eps[i]*eps.on
+  
+  # overdispersion term
+  eps[i] ~ dnorm(0,tau.over) 
+  
+  }
+  
+  alpha ~ dnorm(0, 0.001) # grand intercept
+  tau.over ~ dgamma(0.001,0.001)
+  p.Inc ~ dbeta(1,1)
+  
+  # PRIORS
+  for(i in 1:nSpecies){
+  speciesCoeff[i] ~ dnorm(mu.int, tau.int) # Intercept for each species
+  betaTemp[i] ~ dnorm(mu.slope, tau.slope) # Slope for each species
+  }
+  
+  mu.int ~ dnorm(0, 0.001)
+  tau.int <- 1/(sigma.int * sigma.int)
+  sigma.int ~ dunif(0, 10)
+  
+  mu.slope ~ dnorm(0, 0.001)
+  tau.slope <- 1/(sigma.slope * sigma.slope)
+  sigma.slope ~ dunif(0, 10) 
+
+  # PREDICTION
+  for (i in 1:nData.pred) {
+  
+  Fertile.pred[i] ~ dbin(p.pred[i]* Inc.pred[i], N.pred[i])
+  Inc.pred[i] ~ dbern(p.Inc) # zero inflation
+  logit(p.pred[i]) <- alpha + betaTemp[species.pred[i]] * Temp.pred[i] + speciesCoeff[species.pred[i]] + eps.pred[i]*eps.on
+  
+  # overdispersion term
+  eps.pred[i] ~ dnorm(0,tau.over) 
+  
+  }
+
+}
+  ", file = tempFileLoc)
+
 
 Data = list(N = Dat$NumberOfOccurrence,
             Fertile = Dat$SumOffertile, 
-            Year = as.numeric(factor(Dat$year)),
+            Temp = Dat$MeanSummerTemp,
             species = as.numeric(as.factor(Dat$species)),
             nSpecies = nlevels(as.factor(Dat$species)),
-            blockID = as.numeric(as.factor(Dat$blockID)),
-            nBlock = nlevels(as.factor(Dat$blockID)),
-            siteID = as.numeric(as.factor(Dat$siteID)),
-            nSite = nlevels(as.factor(Dat$siteID)),
             nData = nrow(Dat),
-            n.year = length(unique(Dat$year)),
+            eps.on = 1, # Turns on the overdispersion term in the model
             
-            N.pred = Dat$NumberOfOccurrence,
-            Fertile.pred = Dat$SumOffertile,
-            Year.pred = as.numeric(as.factor(Dat$year)),
+            N.pred = Dat$NumberOfOccurrence, 
+            Temp.pred = Dat$MeanSummerTemp,
             species.pred = as.numeric(as.factor(Dat$species)),
-            blockID.pred = as.numeric(as.factor(Dat$blockID)),
             nData.pred = nrow(Dat)
             )
 
 # 3) Specify a function to generate inital values for the parameters
-inits.fn <- function() list(beta.Year = rnorm(3, 0, 0.1),
-                            p.Inc = rbeta(1, 1, 1),
-                            Inc = rep(1, nrow(Dat)),
-                            tau.eps = 1,
+inits.fn <- function() list(alpha = rnorm(1,1,1),
+                            betaTemp = rnorm(length(unique(Dat$species)), 0, 0.1),
                             speciesCoeff = rnorm(length(unique(Dat$species)), 0, 0.1),
-                            siteCoeff = rnorm(length(unique(Dat$siteID)), 0, 0.1),
-                            blockCoeff = rnorm(length(unique(Dat$blockID)), 0, 0.1)
+                            mu.int = rnorm(1, 0, 1),
+                            mu.slope = rnorm(1, 0, 1),
+                            tau.over = 1,
+                            p.Inc = rbeta(1,1,1),
+                            Inc = rep(1, nrow(Dat))
 )
 
+para.names <- c("alpha", "beta", "sigma.int")
 
 
-para.names <- c('beta.Year')
-#para.names <- c('beta.Year', 'tau.eps', 'speciesCoeff')
+jagsModel <- jags.model(file= tempFileLoc, 
+                        data=Data, 
+                        init = inits.fn, 
+                        n.chains = 3, 
+                        n.adapt= 5000)
 
-# Run analysis
+Samples <- coda.samples(jagsModel, 
+                        variable.names = para.names,
+                        n.iter = 5000)
+
+# Plot the mcmc chain and the posterior sample for p
+plot(Samples)
+
+# Statistical summaries of the posterior sample for p
+summary(Samples)
+summary(glmer(cbind(SumOffertile, NumberOfOccurrence - SumOffertile)  ~ MeanSummerTemp + (MeanSummerTemp|siteID) + (1|species), data = Dat, family = "binomial", weights = NumberOfOccurrence))
+
+# convergence check
+gelman.diag(Samples)
+gelman.plot(Samples)
+
+
+
+# Sample simulated posterior for #survivors (alive.pred)
+Pred.Samples <- coda.samples(jagsModel, 
+                             variable.names = "Fertile.pred", 
+                             n.iter = 5000)
+
+# Transform mcmc.list object to a matrix
+Pred.Mat <- as.matrix(Pred.Samples)
+
+# Cretae model checking plots
+res = createDHARMa(simulatedResponse = t(Pred.Mat),
+                   observedResponse = Dat$SumOffertile, 
+                   integerResponse = T, 
+                   fittedPredictedResponse = apply(Pred.Mat, 2, median))
+plot(res)
+
+
+
+# Run analysis using jagsUI
 out <- jags(data = Data,
             inits = inits.fn,
             parameters.to.save = para.names,
@@ -331,42 +292,61 @@ out <- jags(data = Data,
 plot(out)
 print(out, dig = 3)
 
-str(out)
-names(out)
-
-out$samples[[1]]
 
 
+### Questions
+# What to do about site? Include T and P?
+# grand slope, ok?
+# plot sigmoid curves for different sites/t_levels from predicitons
 
-gelman.diag(Samples)
-gelman.plot(Samples)
-
-
-
-Pred.Samples <- coda.samples(jagsModel1, 
-                             variable.names = "Fertile.pred", 
-                             n.iter = 5000)
-
-Pred.Mat <- as.matrix(Pred.Samples)
-
-res = createDHARMa(simulatedResponse = t(Pred.Mat),
-                   observedResponse = Dat$SumOffertile, 
-                   integerResponse = T, 
-                   fittedPredictedResponse = apply(Pred.Mat, 2, median))
-plot(res)
-
-
-
-
-
-
-
-# PREDICTIONS
-for (i in 1:nData.pred) {
-  # binomial
-  Fertile.pred[i] ~ dbin(p.pred[i], N.pred[i])
-  # linear predictor and logit link function
-  logit(p.pred[i]) <- interceptCoeff + beta.Year[Year.pred[i]] + speciesCoeff[species.pred[i]] + blockCoeff[blockID.pred[i]] + eps.pred[i]
+tempFileLoc <- tempfile()
+cat(
+  "model{
   
-  # Overdispersion error term
-  eps.pred[i] ~ dnorm(0, tau.eps)  }
+  #LIKELIHOOD
+  for (i in 1:nData) {
+  Fertile[i] ~ dbin(p[i] * Inc[i], N[i])
+  Inc[i] ~ dbern(p.Inc) # zero inflation
+  logit(p[i]) <- alpha + beta * Temp[i] + betaTemp[species[i]] * Temp[i] + speciesCoeff[species[i]] + eps[i]*eps.on
+  
+  # overdispersion term
+  eps[i] ~ dnorm(0,tau.over) 
+  
+  }
+  
+  alpha ~ dnorm(0, 0.001) # grand intercept
+  beta ~ dnorm(0, 0.001) # grand slope
+  tau.over ~ dgamma(0.001,0.001)
+  p.Inc ~ dbeta(1,1)
+  
+  # PRIORS
+  for(i in 1:nSpecies){
+  speciesCoeff[i] ~ dnorm(mu.int, tau.int) # Intercept for each species
+  betaTemp[i] ~ dnorm(mu.slope, tau.slope) # Slope for each species
+  }
+  
+  mu.int ~ dnorm(0, 0.001)
+  tau.int <- 1/(sigma.int * sigma.int)
+  sigma.int ~ dunif(0, 10)
+  
+  mu.slope ~ dnorm(0, 0.001)
+  tau.slope <- 1/(sigma.slope * sigma.slope)
+  sigma.slope ~ dunif(0, 10) 
+  
+  # PREDICTION
+  for (i in 1:nData.pred) {
+  
+  Fertile.pred[i] ~ dbin(p.pred[i]* Inc.pred[i], N.pred[i])
+  Inc.pred[i] ~ dbern(p.Inc) # zero inflation
+  logit(p.pred[i]) <- alpha + betaTemp[species.pred[i]] * Temp.pred[i] + speciesCoeff[species.pred[i]] + eps.pred[i]*eps.on
+  
+  # overdispersion term
+  eps.pred[i] ~ dnorm(0,tau.over) 
+  
+  }
+  
+  }
+  ", file = tempFileLoc)
+
+
+
