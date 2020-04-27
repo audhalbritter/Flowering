@@ -62,38 +62,19 @@ traits <- tbl(con, "character_traits") %>%
   # Upper: everything but not HAlp, MAlp or Lalp => lowland
   # Lower: LAlp but not Nem, BNem, SBor => alpine
 
+meta <- fertile %>% 
+  ungroup() %>% 
+  distinct(siteID, summerTemperature_gridded, annualPrecipitation_gridded)
 
-# Join fertility and trait data
-fertile <- fertile %>% 
-  left_join(traits, by = "species")
-  
+#### Load Weather data ####
 
-### Data curation  
-fertile <- fertile %>% 
-  filter(year != 2010) %>% # remove 2010, no data
-  # remove species that occur in less than 3 years
-  group_by(turfID, species) %>% 
-  mutate(nYears = n()) %>%
-  filter(nYears > 3) %>% 
-  filter(functionalGroup %in% c("graminoid", "forb")) %>% 
-  # relative fertility (correct for species having different proportion of fertility)
-  group_by(species) %>% 
-  mutate(mean.fertile = mean(PropFertile)) %>% 
-  mutate(rel.fertile = PropFertile / mean.fertile) %>% 
-  mutate(rel.fertile = ifelse(rel.fertile == "NaN", 0 , rel.fertile))
+### WEATHER DATA FROM MODEL
+library("dataDownloader")
+get_file(node = "npfa9", 
+         file = "GriddedDailyClimateData2009-2019.csv", 
+         path = "data_cleaned")
 
-
-# Leave for now, but maybe also filter species (at site level) that never flower
-  #group_by(siteID, species) %>% 
-  #mutate(sum(SumOffertile)) %>% 
-  #filter(`sum(SumOffertile)` == 0)
-
-
-
-#### Load Climate data ####
-
-### GRIDDED DATA
-load("~/Dropbox/Bergen/SeedClim Climate/SeedClim-Climate-Data/GriddedDailyClimateData2009-2017.RData", verbose=TRUE)
+climate <- read_csv(file = "data_cleaned/GriddedDailyClimateData2009-2019.csv")
 
 # Calculate monthly values (sum for prec, mean for temp)
 monthlyClimate <- climate %>%
@@ -104,7 +85,6 @@ monthlyClimate <- climate %>%
   summarise(n = n(), mean = mean(value), sum = sum(value)) %>% 
   mutate(Value = ifelse(Logger == "Precipitation", sum, mean)) %>% 
   select(-n, -sum, -mean)
-
 
 
 # get annual values
@@ -126,7 +106,77 @@ Climate <- monthlyClimate %>%
   select(-n) %>% 
   bind_rows(summer) %>% 
   spread(key = Logger, value = Value) %>% 
-  rename(AnnPrec = Precipitation)
+  rename(AnnPrec = Precipitation, Year = Year2) %>% 
+  ungroup() %>% 
+  mutate(Site = recode(Site, Ulv = "Ulvhaugen", Hog = "Hogsete", Vik = "Vikesland", Gud = "Gudmedalen", Ram = "Rambera", Arh = "Arhelleren", Skj = "Skjellingahaugen", Ves = "Veskre", Alr = "Alrust", Ovs = "Ovstedal", Fau = "Fauske", Lav = "Lavisdalen"))
+
+# Previous year climate
+ClimatePrev <- Climate %>% 
+  mutate(Year = Year + 1) %>% 
+  rename(MeanSummerTempPrev = MeanSummerTemp, AnnPrecPrev = AnnPrec)
+
+# Annomalies, centre and scale
+Climate <- Climate %>% 
+  left_join(ClimatePrev, by = c("Year", "Site")) %>% 
+  left_join(meta, by = c("Site" = "siteID")) %>% 
   
+  # Calculate annomalies
+  mutate(AnnPrecAnnomalie = AnnPrec - annualPrecipitation_gridded,
+         AnnPrecPrevAnnomalie = AnnPrecPrev - annualPrecipitation_gridded,
+         MeanSummerTempAnnomalie = MeanSummerTemp - summerTemperature_gridded,
+         MeanSummerTempPrevAnnomalie = MeanSummerTempPrev - summerTemperature_gridded) %>% 
+  # centre and scale data
+  mutate(AnnPrecGrid.sc = scale(annualPrecipitation_gridded),
+         MeanSummerTempGrid.sc = scale(summerTemperature_gridded),
+         AnnPrec.sc = scale(AnnPrec),
+         MeanSummerTemp.sc = scale(MeanSummerTemp),
+         AnnPrecPrev.sc = scale(AnnPrecPrev),
+         MeanSummerTempPrev.sc = scale(MeanSummerTempPrev)) %>% 
+  mutate(AnnPrecAnnomalie.sc = scale(AnnPrecAnnomalie),
+         MeanSummerTempAnnomalie.sc = scale(MeanSummerTempAnnomalie),
+         AnnPrecPrevAnnomalie.sc = scale(AnnPrecPrevAnnomalie),
+         MeanSummerTempPrevAnnomalie.sc = scale(MeanSummerTempPrevAnnomalie)) 
+
+
+# join climate data
+fertile <- fertile %>% 
+  left_join(Climate, by = c("siteID" = "Site", "year" = "Year", "summerTemperature_gridded", "annualPrecipitation_gridded"))
+
+# Join fertility and trait data
+fertile <- fertile %>% 
+  left_join(traits, by = "species")
+  
+
+### Data curation  
+fertile <- fertile %>% 
+  filter(year != 2010) %>% # remove 2010, no data
+  # remove species that occur in less than 3 years
+  group_by(turfID, species) %>% 
+  mutate(nYears = n()) %>%
+  filter(nYears > 3) %>% 
+  # remove shrubs etc.
+  filter(functionalGroup %in% c("graminoid", "forb")) %>% 
+  # relative fertility (correct for species having different proportion of fertility)
+  group_by(species) %>% 
+  mutate(mean.fertile = mean(PropFertile)) %>% 
+  mutate(rel.fertile = PropFertile / mean.fertile) %>% 
+  mutate(rel.fertile = ifelse(rel.fertile == "NaN", 0 , rel.fertile)) %>% 
+  # Filter species (at site level) that never flower
+  group_by(siteID, species) %>% 
+  mutate(sum(SumOffertile)) %>% 
+  filter(`sum(SumOffertile)` != 0)
+
+
+# Select common species (in time or space) that occur in 8 or more turfs
+commonSP <- fertile %>% 
+  filter(NumberOfOccurrence > 20) %>% 
+  ungroup() %>% 
+  distinct(species)
+
+fertileCommon <- fertile %>% 
+  inner_join(commonSP, by = "species") %>% 
+  group_by(year, species) %>% 
+  mutate(n = n()) %>% 
+  filter(n > 7)
 
 
