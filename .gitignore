@@ -36,6 +36,7 @@ vignettes/*.pdf
 *.sqlite
 *.dat
 *.txt
+*.pptx
 
 #rasters & shapefiles
 *.bil
