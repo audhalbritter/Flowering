@@ -6,6 +6,6 @@ loadd()
 failed()
 
 #view dependency graph
-r_vis_drake_graph(source = "R/AudsDrakePlan.R", targets_only = TRUE)
+r_vis_drake_graph(source = "R/FloweringDrakePlan.R", targets_only = TRUE)
 
 #**********************************************************************

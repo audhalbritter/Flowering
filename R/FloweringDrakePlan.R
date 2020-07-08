@@ -10,16 +10,17 @@ library("tidyverse")
 library("lubridate")
 library("jagsUI")
 library("rjags")
+library("DHARMa")
 
 library("knitr")
 library("bookdown")
 library("citr")
 
-library("R2jags")
-library("DHARMa")
-library("lme4")
-library("vegan")
-library("patchwork")
+# library("R2jags")
+
+# library("lme4")
+# library("vegan")
+# library("patchwork")
 
 # tricks
 pn <- . %>% print(n = Inf)
@@ -33,33 +34,50 @@ pkgconfig::set_config("drake::strings_in_dots" = "literals")
 
 theme_set(theme_bw(base_size = 15))
 
-### LOAD DATA FUNCTION
+
+### SOURCE FUNCTIONS
 source("R/Load Data from database.R")
-
-### DATA ANALYSIS
-source("R/SaunaModel.R")
-
-
-### IMPORT DRAKE PLANS
-source("R/ImportPrettyDataPlan.R")
-source("R/DataProcessingDrakePlan.R")
-source("R/DataAnalyisDrakePlan.R")
-source("R/MakePrettyFiguresPlan.R")
+source("R/Methods.R")
+#source("R/SaunaModel.R")
+#source("R/BayesianAnalysis_Temperature.R")
 
 
+### DRAKE PLANS
+ImportDrakePlan <- drake::drake_plan(
+  # DownloadData from OSF!!!
+  
+  # Load
+  fertile_raw = ImportFertility(),
+  meta = MakeMeta(fertile_raw),
+  traits = ImportTraits(),
+  sites = ImportSite(),
+  Climate = ImportClimate(meta),
+  
+  # Curate
+  fertile = CombineandCurate(fertile_raw, Climate, traits)
+)
+
+
+MethodDrakePlan <- drake::drake_plan(
+  Table1 = MakeTable1(sites),
+  
+  #Map = MakeMap(sites),
+  ClimatePlot = MakeClimatePlot(Climate, sites)
+)
+
+
+# AnalysisDrakePlan <- drake::drake_plan(
+#   fertile_raw = ImportFertilityData(),
 
 
 
 ### COMBINING THE DRAKE PLANS 
-MasterDrakePlan <-  bind_rows(ImportDrakePlan, 
-                              CountryListAndTraitMeanDrakePlan,
-                              DataProcessingDrakePlan,
-                              DataAnalysisDrakePlan,
-                              MakePrettyFiguresPlan) 
+MasterDrakePlan <-  bind_rows(ImportDrakePlan,
+                              MethodDrakePlan) 
 
 #DataAnalysisDrakePlan
 
 #configure and make drake plan
-config <- drake_config(MasterDrakePlan)
+config <- drake::drake_config(MasterDrakePlan)
 
 config
