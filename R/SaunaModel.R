@@ -3,15 +3,15 @@
 # fertility ~ climateT(grid) * climateP(grid) + WeatherT(Annomalie) + WeatherP(Annomalie) + WeatherPrevT(Annomalie) + WeatherPrevP(Annomalie) + (1|sp) + (1|year) + (1|site)
 
 tempFileLoc <- tempfile()
-cat(
-  "model{
+  cat(
+    "model{
   
   # BINOMIAL LIKELIHOOD
   for(i in 1:nData){
   Fertile[i] ~ dbin(p[i], N[i])
   
-  #Fertile[i] ~ dbin(p[i] * Inc[i], N[i])
-  #Inc[i] ~ dbern(p.Inc) # zero inflation
+  Fertile[i] ~ dbin(p[i] * Inc[i], N[i])
+  Inc[i] ~ dbern(p.Inc) # zero inflation
 
   logit(p[i]) <- alpha + 
   betaClimateT * ClimateT[i] + 
@@ -24,7 +24,8 @@ cat(
 
   speciesCoeff[species[i]] + 
   siteCoeff[siteID[i]] + 
-  yearCoeff[year[i]] + eps[i] * eps.on
+  yearCoeff[year[i]] + 
+  eps[i] * eps.on
 
 # Interactions not used at the moment!!!
 # + betaCTWP * ClimateT[i] * WeatherP[i] + betaCPWT * ClimateP[i] * WeatherT[i] 
@@ -67,40 +68,31 @@ cat(
   
 
   # binary variable to indicate flowering
-  #p.Inc ~ dbeta(1,1)
+  p.Inc ~ dbeta(1,1)
   tau.over ~ dgamma(0.001,0.001)
   
-  }
-  ", file = tempFileLoc)
-
-
-
-# PREDICITON
-for(i in 1:nData.pred){
+  
+  # PREDICITONS
+  for(i in 1:nData.pred){
   Fertile.pred[i] ~ dbin(p.pred[i], N.pred[i])
 
   logit(p.pred[i]) <- alpha + 
-    betaClimateT * ClimateT.pred[i] + 
-    betaWeatherT * WeatherT.pred[i] + 
-    betaClimateP * ClimateP.pred[i] + 
-    betaWeatherP * WeatherP.pred[i] + 
-    betaWeatherPrevT * WeatherPrevT.pred[i] + 
-    betaWeatherPrevP * WeatherPrevP.pred[i] + 
-    betaCTCP * ClimateT.pred[i] * ClimateP.pred[i] + 
+  betaClimateT * ClimateT.pred[i] + 
+  betaWeatherT * WeatherT.pred[i] + 
+  betaClimateP * ClimateP.pred[i] + 
+  betaWeatherP * WeatherP.pred[i] + 
+  betaWeatherPrevT * WeatherPrevT.pred[i] + 
+  betaWeatherPrevP * WeatherPrevP.pred[i] + 
+  betaCTCP * ClimateT.pred[i] * ClimateP.pred[i] + 
     
-    speciesCoeff[species.pred[i]] + 
-    siteCoeff[siteID.pred[i]] + 
-    yearCoeff[year.pred[i]] + eps.pred[i] * eps.on
-  
+  speciesCoeff[species.pred[i]] + 
+  siteCoeff[siteID.pred[i]] + 
+  yearCoeff[year.pred[i]] + 
+  eps.pred[i] * eps.on
+
   # overdispersion term
   eps.pred[i] ~ dnorm(0, tau.over) 
-}
-
-#for(i in 1:nData.pred) {
-  #Fertile.pred[i] ~ dbin(p.pred[i] * Inc[i], N.pred[i])
-  #Inc.pred[i] ~ dbern(p.Inc) # zero inflation
-  #logit(p.pred[i]) <- alpha[siteID.pred[i]] + beta[siteID.pred[i]] * Temp.pred[i] + speciesCoeff[species.pred[i]] #+ eps.pred[i] 
+  }
   
-  # overdispersion term
-  #eps.pred[i] ~ dnorm(0, tau.eps) 
-#}
+  }
+  ", file = tempFileLoc)
