@@ -66,14 +66,26 @@ MethodDrakePlan <- drake::drake_plan(
 )
 
 
+
 # AnalysisDrakePlan <- drake::drake_plan(
 #   fertile_raw = ImportFertilityData(),
 
 
+# knit manuscript
+ManuscriptDrakePlan <- drake::drake_plan(
+  manuscript = {
+    rmarkdown::render(
+      input = knitr_in("Writing/Flowering_manuscript.Rmd"),
+      knit_root_dir = "../",
+      clean = FALSE)
+  }
+)
+
 
 ### COMBINING THE DRAKE PLANS 
 MasterDrakePlan <-  bind_rows(ImportDrakePlan,
-                              MethodDrakePlan) 
+                              MethodDrakePlan,
+                              ManuscriptDrakePlan) 
 
 #DataAnalysisDrakePlan
 
