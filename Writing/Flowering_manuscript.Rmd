@@ -1,75 +1,95 @@
 ---
-title: Flowering manuscript
+title: Climate impacts plant fertility in space and time
 
 author: |
-  | Halbritter, A. H. ^[Corresponding author: aud.halbritter@uib.no] $^1$, Goldberg, D. $^2$, Gya, R. $^1$, Jaroszynska, F. $^1$, Klanderud, R. $^3$, Olsen, S. L. $^4$, Telford, R. J. $^1$, Töpper, J. P. $^4$ and Vandvik, V. $^1$
+  | Halbritter, A. H. ^[Corresponding author: aud.halbritter@uib.no] $^1$, Goldberg, D. $^2$, Gya, R. $^1$, Jaroszynska, F. $^1$, 
+  | Klanderud, R. $^3$, Olsen, S. L. $^4$, Telford, R. J. $^1$, Töpper, J. P. $^4$ 
+  | and Vandvik, V. $^1$
+address: |
   | $^1$University of Bergen, $^2$University of Michigan, $^3$NMBU, $^4$Nina
 
 
 abstract: |
   Climate change impacts on biodiversity are often inferred from studies investigating species’ performance in response to climatic variability in time or space, i.e. in response to temporal climate fluctuations or along spatial environmental gradients. However, the potential underlying drivers, and hence the interpretation of the observed responses, differs between temporal and spatial gradient studies. Temporal studies are effective in assessing ecological response rates and directions of change, as well as the underlying processes, and, in the case of longer time-series, directions of change and magnitude of time-lags. In contrast, spatial gradient studies reflect long-term outcomes of different climatic regimes, and are therefore suited to assess evolutionary outcomes and ecological equilibria under different climatic conditions. Combining the two approaches in a single study can therefore inform about both short-term responses and longer-term outcomes of climate change on biota. Plant reproduction is generally spatially variable, reflecting long term responses to a specific environmental condition, and at the same time plants respond plastically in reproduction to short term seasonal climatic fluctuations (i.e. if a plant flowers this year or not). Reproductive effort also varies between species, depending on different strategies, such as growth form and clonality, and we hypothesize that graminoids and forbs differ in their responses across space and time. Here, we study plant fertility in 12 grassland sites, selected to represent a spatial ‘climate grid’ with independently varying summer temperature (6.5 - 10.5°C) and annual precipitation (600 - 2200 mm). Throughout this grid, we assessed plant reproductive effort (measured as the frequency of investment in buds, flowers or seeds) in 181 species of vascular plants in 120 permanently marked plots over nine years. The combined spatio-temporal dataset allowed us to assess how the reproductive effort in these plant communities is affected by climate on different time-scales and through different mechanisms. The plant communities differed in fertility across time and space. They were generally less fertile in wet years, and had higher fertility towards warmer and drier climates. Fertility, both in terms of  spatial patterns and plastic responses, differed between graminoids and forbs. Graminoids were less fertile in warm years, while fertility in forbs increased  following a warm year. The combined results of the space and time approaches allowed us to detect climate control where a single approach could have overlooked them, i.e. only looking at temporal changes without accounting for spatial differences.
 
-
-bibliography: Paperpile - Jul 07 BibTeX Export.bib
-csl: journal-of-ecology.csl
-
-
-output:
-  bookdown::pdf_document2:
-  toc: no
-  fig_caption: yes
-
- #always_allow_html: yes
-
+date: "`r format(Sys.Date(), '%d %B %Y')`"
 
 # These are LaTex settings to take care of floating figures/tables, line spacing, etc
 header-includes:
-  - \usepackage{endfloat}
+  #- \usepackage{endfloat} put figs at the end
   - \usepackage{setspace}\doublespacing
   - \usepackage{lineno}
   - \linenumbers
+  
+output:
+  bookdown::pdf_book:
+    toc: no
+  #bookdown::pdf_document2:
+  fig_caption: yes
+  # number_sections: true
+  
+documentclass: article
+classoption: a4paper
+bibliography: Paperpile - Jul 07 BibTeX Export.bib
+csl: journal-of-ecology.csl
+
+ #always_allow_html: yes
+
 ---
 
-```{r Setup..., message=FALSE, warning=FALSE, include=FALSE}
-knitr::opts_chunk$set(fig.pos = 'p') # Places figures on their own pages
-knitr::opts_chunk$set(out.width = '100%', dpi=300)
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+#knitr::opts_chunk$set(fig.pos = 'p') # Places figures on their own pages
+options(digits = 2)
+#theme_set(theme_bw(base_size = 12))
+#knitr::opts_chunk$set(out.width = '100%', dpi=300)
 
-#library(kableExtra)
-#library(ggthemes)
-#library(ggExtra)
+loadd()
 
 ```
 
-
+**Keywords:** fertility, temperature, precipitation, plant, reproduction
 
 ## INTRODUCTION
-Climate change impacts plant performance and reproduction across the globe. A change in climate can be both positive or negative for reproduction in plants. 
+Climate change has cause an alteration in means and variation in both global temperature and precipitation for the last 70 years @Ipcc2013-li. This has led to a change in the abiotic conditions the plants experience with impacts on biodiverstiy and in particular plant distribution, composition, and demography @Elmendorf2012-bz;@Pacifici2015-il;@Topper2018-oy.
 
-There are different approaches to understand the impacts of climate change on biodiversity. We can investigate species’ performance in response to climatic variability in time or space using gradient approach. In other word we can study species response to temporal climate fluctuations or along spatial environmental gradients.
-Explain the difference between spatial and temporal gradients:
-Spatial gradients: long term adaptation/response to climate regimes; Temporal gradients: plastic response / quick responses/ no time lag. 
-The potential underlying drivers, and hence the interpretation of the observed responses, differs between temporal and spatial gradient studies. Temporal studies are effective in assessing ecological response rates and directions of change, as well as the underlying processes, and, in the case of longer time-series, directions of change and magnitude of time-lags. In contrast, spatial gradient studies reflect long-term outcomes of different climatic regimes, and are therefore suited to assess evolutionary outcomes and ecological equilibria under different climatic conditions.
-What can we learn from combining the two approaches? We answer questions at different time scales and different mechanisms.
-Combining the two approaches in a single study can therefore inform about both short-term responses and longer-term outcomes of climate change on plant communities.
-Plant reproduction varies in space and time: Plant reproduction is generally spatially variable, reflecting long term responses to a specific environmental condition, and at the same time plants respond plastically in reproduction to short term seasonal climatic fluctuations (i.e. if a plant flowers this year or not). Reproductive effort also varies between species, depending on different strategies, such as growth form and clonality, and we hypothesize that graminoids and forbs differ in their responses across space and time.
-Here, we study plant fertility in 12 grassland sites, selected to represent a spatial ‘climate grid’ with independently varying summer temperature (6.5 - 10.5°C) and annual precipitation (600 - 2200 mm). Throughout this grid, we assessed plant reproductive effort (measured as the frequency of investment in buds, flowers or seeds) in 181 species of vascular plants in 120 permanently marked plots over nine years. The combined spatio-temporal dataset allowed us to assess how the reproductive effort in these plant communities is affected by climate on different time-scales and through different mechanisms.
+Different approaches are used to understand the impacts of climate change on biodiversity and plant performans. We can investigate species’ performance in response to climatic variability in space or time (refs). The potential underlying drivers, and hence the interpretation of the observed responses, differs between temporal and spatial gradient studies. Spatial approaches are studies that exploit the changing abiotic factors along environmental gradients, i.e. elevation, continentality. They reflect long-term outcomes of different climatic regimes, and are therefore suited to assess evolutionary outcomes and ecological equilibria under different climatic conditions. Temporal approaches, assess species responses over time and are effective in assessing ecological response rates and directions of change, as well as the underlying processes, and, in the case of longer time-series, directions of change and magnitude of time-lags (plastic response/no time lag). Combining the two approaches in a single study can therefore inform about both short-term plastic responses and longer-term outcomes of climate change on plant communities.
+[//]: # "from https://besjournals.onlinelibrary.wiley.com/doi/full/10.1111/1365-2435.12599"
+However, climatic manipulations need to extend over sufficient spatial scale and numerous years in order to encompass also delayed responses and the complexity and potential feedbacks of interactions (Michalet 2007; Maestre et al . 2009). Such large‐scale and long‐term experiments are costly, time‐consuming and so far very rare, especially in dryland ecosystems (Tielbörger & Salguero‐Gomez 2013).
 
+Plant reproduction varies both spatially across climate gradients (ref) temporally to short-term variability in climatic conditons (i.e. seasonal climatic fluctuations) (ref). Warmer climate can advance and accellerate flowering, while too warm conditions can slow down. Too dry or wet conditions can prevent flowering. In mountains, more precipitation as snow, will shorten the growing season and can again accellerate the flowering for species that are adapted to such conditions. How does the previous year climate affect reproduction?
 
+Other factors than climate can affect reproductive effort in plants. Plant traits/properties such as functional group (forb, graminoid), habitat (alpine/lowland/generalist), clonality, pollination, and longevity can have an effect on reproduction.
+- Graminoids are less vulnerable to changes in temperature and precipitation than forbs (ref).
+- Alpine plants invest more in energy storage such as seedbanks, clonal growth and the plants only flower in years where the conditons (climate) are benefitial.
+- Weather a plant depends on pollinators or is selfing can have an effect on how much a plant needs to flower in one grwoing season.
+Finally, life strategy such as longevity (annual/perennial) will define how desperetly a plant needs to flower and reproduce in a year.
+Life form and reproduction strategy will affect how plants respond to changes in climate across climate gradients.
 
+Here, we study reproduction in 12 grassland communities, selected to represent a spatial ‘climate grid’ with independently varying summer temperature (6.5 - 10.5°C) and annual precipitation (600 - 2200 mm) over a temporal scale of 10 years. Throughout this grid, we assessed plant reproductive effort (measured as the frequency of investment in buds, flowers or seeds) in `r fertile %>% mutate(species = as.factor(species)) %>% distinct(species) %>% count()` species of vascular plants in `r fertile %>% mutate(species = as.factor(turfID)) %>% distinct(turfID) %>% count()` permanently marked plots over a period of nine years. The combined spatio-temporal dataset allowed us to assess how the reproductive effort in these plant communities is affected by climate on different time-scales and through different mechanisms. Specifically, we ask how does the reproductive effort in these plant communities change in space and time?
 
-clonality, pollination, longevity, etc. And they can also respond plastic to climatic variability.
-In the alpine sites, species need to have an (energy) storage: seedbank, clonal,... these plants will not flower every year. And this is an opportunity to find what factors determine if a plant flowers or not. How much does last/this year climate explain? How much variation do different groups of species explain.
-Seedbanks, clonality, pollination strategy, longevity (annual/perennial): could affect reproduction strategy; does an individual flower and produce seeds in a cold/wet year? Does it have the possibility to save it for next year. How does the previous year climate affect reproduction.
-Questions:
-Temporal: change in fertility across years
-Spatial: change in fertility across space (climate grid)
-Some species (group) level explanations (clonality, seedbank, longevity,...)
-
+Maybe also ask how different life and reproduction strategies affect the reproductive effort in these communities and at the species level (functional group, habitat, clonality, pollination, longevity).
 
 
 ## METHODS
 ### Study site and plant communities
 Twelve semi-natural grassland sites were selected in 2009 in western Norway, within a climate grid consisting of a temperature gradient from boreal to alpine replicated along a precipitation gradient from continental to oceanic (Fig. 1). The sites differ in mean summer temperature (mean temperature of the four warmest month: alpine 6.5°C, subalpine 8.5°C and boreal 10.5°C) and annual precipitation (600, 1200, 2000 and 2700 mm; interpolated climate data with 100m resolution from the normal period 1961 - 1990 provided by the Norwegian Meteorological Institute, met.no). Except for the two climate variables, the sites were selected to be as similar as possible. They are associated with calcareous bedrock, sociological association *Potentillo-Festucetum ovinae* @Fremstad1997-to, south-west facing, and moderately grazed @Klanderud2015-po. The sites were fenced to avoid grazing by larger herbivores and annually mowed to simulate the grazing regime.
+
+```{r Table1}
+
+#loadd(Table1)
+
+
+```
+
+
+```{r ClimatePlot, fig.cap = "Gridded climate data in the twelve site over a 11 year period."}
+
+readd(ClimatePlot)
+
+
+```
+
 
 ### Data collection
 In 2009, five blocks with ten randomly placed 25x25cm plots were established. The plots were part of a transplant experiment and half of the plots in each block were transplanted within the block (dug out and placed back in the ground). We use these plots as control plots, because there was never found a difference in species response (community composition, demography,...?) compared to the untouched control plots. Each plot was divided into 25 subplots. In each subplot, fertility (if a plant has produced buds, flower or seeds) was recorded at the peak growing season in 2009, 2011, 2012, 2013, 2015 and 2017. There was no data collection in 2010, 2014 and 2016, because of resting plots, and after 2013, only every second year. We therefore added the same data from control plots from another experiment in the same sites. Here, flowering was recorded only in 6 subplots? Need to check if this makes a difference.
@@ -104,3 +124,7 @@ Clonality within the perennials. Clonality: they do not need to flower every yea
 Seed bank
 Pollination strategy: wind vs. insect -> might reflect grass vs. forb (only Thalictrum is wind?)
 growth traits: clonal traits, leaf traits
+
+
+
+## REFERENCES
