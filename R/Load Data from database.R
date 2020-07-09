@@ -169,7 +169,16 @@ ImportClimate <- function(meta){
     mutate(AnnPrecAnnomalie.sc = as.vector(scale(AnnPrecAnnomalie)),
            MeanSummerTempAnnomalie.sc = as.vector(scale(MeanSummerTempAnnomalie)),
            AnnPrecPrevAnnomalie.sc = as.vector(scale(AnnPrecPrevAnnomalie)),
-           MeanSummerTempPrevAnnomalie.sc = as.vector(scale(MeanSummerTempPrevAnnomalie))) 
+           MeanSummerTempPrevAnnomalie.sc = as.vector(scale(MeanSummerTempPrevAnnomalie))) %>% 
+    mutate(Temp_level = case_when(Site %in% c("Ulvhaugen", "Lavisdalen", "Gudmedalen", "Skjellingahaugen") ~ "alpine",
+                                Site %in% c("Alrust", "Hogsete", "Rambera", "Veskre") ~ "subalpine",
+                                Site %in% c("Fauske", "Vikesland", "Arhelleren", "Ovstedal") ~ "boreal"),
+           Prec_level = case_when(Site %in% c("Ulvhaugen", "Alrust", "Fauske") ~ "600mm",
+                                Site %in% c("Lavisdalen", "Hogsete", "Vikesland") ~ "1200mm",
+                                Site %in% c("Gudmedalen", "Arhelleren", "Rambera") ~ "2000mm",
+                                Site %in% c("Skjellingahaugen", "Veskre", "Ovstedal") ~ "2700mm")) %>% 
+    mutate(Prec_level = factor(Prec_level, levels = c("600mm", "1200mm", "2000mm", "2700mm")))
+  
   return(Climate)
 }
 
@@ -200,7 +209,8 @@ CombineandCurate <- function(fertile_raw, Climate, traits){
     # Filter species (at site level) that never flower
     group_by(siteID, species) %>% 
     mutate(sum(SumOffertile)) %>% 
-    filter(`sum(SumOffertile)` != 0)
+    filter(`sum(SumOffertile)` != 0) %>% 
+    ungroup()
   
   return(fertile)
 }
