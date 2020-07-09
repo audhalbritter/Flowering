@@ -77,6 +77,8 @@ ImportTraits <- function(){
     rename(FloweringFinish = `Flowering finish`, FloweringStart = `Flowering start`) %>% 
     mutate(FloweringFinish = plyr::mapvalues(FloweringFinish, c("H<f8>st", "MSo", "SSo", "FSo", "V<e5>r"), c("Host", "MSo", "SSo", "FSo", "Var"))) %>% 
     mutate(FloweringStart = plyr::mapvalues(FloweringStart, c("MSo", "SSo", "FSo", "V<e5>r"), c("MSo", "SSo", "FSo", "Var")))
+    
+    return(traits)
   
   # Occurrence
   # Upper: everything but not HAlp, MAlp or Lalp => lowland
@@ -89,19 +91,22 @@ ImportSite <- function(){
   con <- dbConnect(SQLite(), dbname = "~/Dropbox/Bergen/seedclimComm/database/seedclim.sqlite")
   
   # Load site details
-  sites.raw <- tbl(con, "sites")
+  sites.raw <- tbl(con, "sites") %>% 
+    collect()
   
   sites <- sites.raw %>% 
     select(siteID, latitude, longitude, `altitude(DEM)`, annualPrecipitation_gridded, temperature_level, summerTemperature_gridded, precipitation_level) %>% 
     rename("elevation_masl" = `altitude(DEM)`) %>% 
     mutate(temperature_level2 = case_when(temperature_level == "1" ~ "alpine",
-                                         temperature_level == "2" ~ "subalpine",
-                                         temperature_level == "3" ~ "boreal"),
+                                          temperature_level == "2" ~ "subalpine",
+                                          temperature_level == "3" ~ "boreal"),
            precipitation_level2 = as.character(case_when(precipitation_level == "1" ~ "600",
-                                           precipitation_level == "2" ~ "1200",
-                                           precipitation_level == "3" ~ "2000",
-                                           precipitation_level == "4" ~ "2700"))) %>% 
-    mutate(precipitation_level2 = factor(precipitation_level2, levels = c("600", "1200", "2000", "2700")))
+                                                         precipitation_level == "2" ~ "1200",
+                                                         precipitation_level == "3" ~ "2000",
+                                                         precipitation_level == "4" ~ "2700")),
+           
+           precipitation_level2 = factor(precipitation_level2, levels = c("600", "1200", "2000", "2700")),
+           temperature_level2 = factor(temperature_level2, levels = c("alpine", "subalpine", "boreal")) 
   
   return(sites)
 }
